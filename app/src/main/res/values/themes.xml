@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Framework-only theme (no extra dependencies); actual UI styling is
+         done in Compose via MaterialTheme, which defaults to dark-friendly. -->
+    <style name="Theme.Nav" parent="android:Theme.DeviceDefault.NoActionBar" />
+</resources>
