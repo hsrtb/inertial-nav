@@ -1,0 +1,128 @@
+[148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260705_162737.csv 
+max acc: 51.91588
+max gyr: 4.238183
+max lac: 17.268545
+[nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260705_173845.csv 
+max acc: 89.775116
+max gyr: 16.319418
+max lac: 71.65058
+
+[nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260705_162737.csv 
+max diff acc: 38.583072
+max diff gyr: 0.94623028
+max diff lac: 19.5087565
+[nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260705_173845.csv 
+max diff acc: 42.929032
+max diff gyr: 2.7469082999999994
+max diff lac: 84.276555
+
+
+[nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260707_134509.csv 
+max acc: 11.496316
+max gyr: 0.7632761
+max lac: 1.1499062
+max diff acc: 0.6412770000000005
+max diff gyr: 0.09514226
+max diff lac: 1.6118069000000002
+
+
+[148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260707_140731.csv 
+max acc: 11.134402
+max gyr: 0.36667186
+max lac: 2.0018091
+max diff acc: 2.45742892
+max diff gyr: 0.08735372999999999
+max diff lac: 1.6715099949999999
+
+the docs state that the lac sensor has an offset; for this track (140731), computing manually:
+    derived from datpoint 359 / 4.7754 sec elapsed distances by a = 2d/t^2, the lacs reported when should have been zero were: [0.00596, -0.0937, -0.0354]
+using the raw lac values, the final computed position was [0,2407, -3.0059, -1.5535]
+using the above offsets, the position at 359 was close to zeroed out: [-3.775e-05, -0.0003246, -0.005290]
+and the final position was: [-0.006695, 0.88395, -0.0839]
+programmatically analyzing the lac values through 359 gives:
+    mean: [0.004589053599944445, -0.08244096507222222, -0.03665653591666666]
+    sigma: [0.008955879095290826, 0.025605613131009567, 0.0354847935848948]
+statistical significance, though I'm not sure how much it means:
+    > pnorm(2)
+    [1] 0.9772499
+    > 2 * (1 - pnorm(2))
+    [1] 0.04550026
+    > 2 * (1 - pnorm(4589/8955))
+    [1] 0.6083353
+    > 2 * (1 - pnorm(8244/2560))
+    [1] 0.001280509
+    > 2 * (1 - pnorm(3665/3548))
+    [1] 0.301615
+using the calculated means as offsets gives position at 359 as [0.01559, -0.1287, 0.0090368] and final position as [0.0502, 0.4165, -0.03182]; also gives final y-velocity of 0.2117; the velocities at 359 are all sub-millimeter
+so looks like (as I should have anticipated) this is going to be unusable for centimeter-level precision
+
+moving to a one-minute test of the phone sitting still:
+[nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260707_152445.csv 
+max acc: 10.12164
+max gyr: 0.15867224
+max lac: 0.30594826
+max diff acc: 0.38823599999999914
+max diff gyr: 0.02580905
+max diff lac: 0.43733215000000003
+mean: [-0.00031618711313903183, 0.00041881511691953775, -0.03898007287407545]
+sigma: [0.008745997857092649, 0.011957072588970925, 0.021414290677426912]
+
+last two lines are for lac; p-values again:
+    > 2 * (1 - pnorm(316/3746))
+    [1] 0.9327729
+    > 2 * (1 - pnorm(419/11957))
+    [1] 0.9720461
+    > 2 * (1 - pnorm(38980/21414))
+    [1] 0.06871265
+
+with no offset, final computed position is [-1.85, 2.26, -74.04]
+notable that both the bias and the noise were different on this run, but whether the cause is the hardware or the lac algorithm is unknown.
+thus I will proceed to using acc, as I really should have started with - why bother with lac when you have to strip an offset out anyway?
+
+stats on acc:
+    [148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260707_152445.csv 
+    mean: [-0.014922616357225874, -0.037233321651443725, 9.771009613718084]
+    sigma: [0.011409482717325085, 0.014792566921100796, 0.025079818738741485]
+so the lac algorithm cut the noise by 20%:
+    > 8746/11409
+    [1] 0.7665878
+    > 11957/14792
+    [1] 0.8083423
+    > 21414/25080
+    [1] 0.8538278
+from the central limit theorem, those ratios should be 1/sqrt(6) = 0.408...
+averaging acc into buckets of 6 gives:
+    [148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260707_152445.csv 
+    mean: [-0.014923212832872087, -0.03722990975277112, 9.770995872771845]
+    sigma: [0.006968045864276048, 0.011460390688405021, 0.018642095831701205]
+
+    > 6968/11409
+    [1] 0.6107459
+    > 11460/14792
+    [1] 0.7747431
+    > 18642/25080
+    [1] 0.7433014
+which is better than lac but not great
+averaging acc into buckets of 45 (i.e. cutting to 10Hz) gives:
+    [148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260707_152445.csv 
+    mean: [-0.014921524267062551, -0.03723835855228787, 9.771013175637828]
+    sigma: [0.002747746098115346, 0.006101075969193909, 0.004513173446376685]
+CLT expectation would be 1/sqrt(45) = 0.149...:
+    > 2747/11409
+    [1] 0.2407748
+    > 6101/14792
+    [1] 0.4124527
+    > 4513/25080
+    [1] 0.1799442
+averaging acc into buckets of 45 also gives:
+    [148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260707_152445.csv 
+    max acc: 9.794434611111111
+    max diff acc: 0.07347294900222223
+so this also (as expected) makes the data smoother.
+looking at my 20260706-202528 ride, acceleration during the sprint phase was around 80-160 mm/s^2, and during the more regular cruise phase it ranged from occasionally
+as low as 30 mm/s^2 to more typically ~120 mm/s^2 to at one point as high as 500 mm/s^2
+so I think this is looking promising. the noise in the perturbation to the existing trajectory (1/2)a(dt)^2 will be (1/2)(6 mm/s^2)(0.1s)^2 = 0.03 mm over a period
+that plausibly covers 50-100 cm. the noise in the perturbation to the velocity a(dt) will be (6 mm/s^2)(0.1 s) = 0.6 mm/s which over 5 seconds = 50 periods compounds to
+at maximum 30 mm/s, which would create ~75 mm of error in the final position - over a period that plausibly covers 25-50 m. but this seems to be noise i.e. averaging
+out to zero (it ran for 61 s without the reading seeming to drift), so really it looks like the performance will be even sigificantly better. this is almost suspiciously
+good, though; we'll have to see what happens when it's under real and/or variable acceleration.
