@@ -126,3 +126,57 @@ that plausibly covers 50-100 cm. the noise in the perturbation to the velocity a
 at maximum 30 mm/s, which would create ~75 mm of error in the final position - over a period that plausibly covers 25-50 m. but this seems to be noise i.e. averaging
 out to zero (it ran for 61 s without the reading seeming to drift), so really it looks like the performance will be even sigificantly better. this is almost suspiciously
 good, though; we'll have to see what happens when it's under real and/or variable acceleration.
+
+----------------------------------------------------------------------------------------------------------------------------
+it appears that the lac sensor failed to give zero on the device being at rest due to assuming g=9.81:
+    [148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260707_152445.csv 
+    for lac:
+    mean: [-0.00031618711313903183, 0.00041881511691953775, -0.03898007287407545]
+    sigma: [0.008745997857092649, 0.011957072588970925, 0.021414290677426912]
+    for acc:
+    mean: [-0.014922616357225874, -0.037233321651443725, 9.771009613718084]
+    sigma: [0.011409482717325085, 0.014792566921100796, 0.025079818738741485]
+    implied gravity is: [-0.014606429244086842, -0.037652136768363265, 9.809989686592159]
+    with magnitude: 9.810072817376179
+
+for the rot sensor: using the values from 11% (reported by vim) of the way through the file gives:
+    > theta = 2 * acos(0.9821362)
+    > x = -0.002039285 / sin(theta / 2)
+    > y = 9.736165e-4 / sin(theta / 2)
+    > z = -0.18815824 / sin(theta / 2)
+    > theta
+    [1] 0.3786
+    > x
+    [1] -0.01083738
+    > y
+    [1] 0.005174093
+    > z
+    [1] -0.9999299
+    > theta * 180 / pi
+    [1] 21.69218
+indicating that the phone was pointing ~22 degrees east of magnetic north. I recall the phone being pointed due north.
+placing the phone in approximately the same position, the compass app i have from f-droid initially read about 20 degrees
+east of magnetic north and then slowly drifted closer to north, reaching about 10 degrees after a few minutes, i think; closing and reopening
+has sometimes made it start at 15 deg and sometimes reset it to 21 deg. passing it over the keyboard deck of the laptop (from the right/east side
+to the left/west) deflects it to 353 deg, and moving it back puts it back to ~9-13 deg. closing and reopening with it sitting on the left causes it
+to open to ~265 deg; trying it again and it's now at 25-30 deg. the compass app says to move the device in a figure-8 pattern to improve accuracy, which
+worked for me once. opening the app in the middle of the street (i.e. far away from sources of magnetic fields) still started at 10 or 15 deg; figure 8
+got it close to zero eventually.
+
+so the prospects for reliably converting from the device coordinates to world coordinates are not looking good.
+
+now with a new recording, 20s still then ~3m to the north = +y-axis; testing the first 19s:
+    [148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 
+    for lac:
+    mean: [-0.0004213680648547368, -0.0058073444859882105, -0.02601843650810526]
+    sigma: [0.010971530407427696, 0.008696505861703223, 0.01137840704727636]
+    for acc:
+    mean: [0.1694698457639766, 0.051241807331578945, 9.782066935964911]
+    sigma: [0.013575434276693044, 0.010589736016448992, 0.014532160106717089]
+    implied gravity is: [0.16989121382883135, 0.05704915181756716, 9.808085372473016]
+    with magnitude: 9.80972253960215
+integrating calculated lac = (acc - mean acc over the first 19s) gives final datapoint 26.395839 s, position [0.462, 2.477, 0.029],
+velocity [-0.0177, -0.10665, 0.006], and calculated lac [0.041, 0.047, 0.102]
+at 26.001 s we have position [0.464, 2.516, 0.029], velocity [0.007, -0.094, 0.001], calculated lac [-0.058, -0.018, 0.006]
+measuring I find the actual distance to be 2.7 m
+at 20.001 s we have position [-0.056, 0.036, 0.016], velocity [0.00297, 0.0046, 0.0148], calculated lac [0.0177, 0.0241, 0.00637]
