@@ -180,3 +180,63 @@ velocity [-0.0177, -0.10665, 0.006], and calculated lac [0.041, 0.047, 0.102]
 at 26.001 s we have position [0.464, 2.516, 0.029], velocity [0.007, -0.094, 0.001], calculated lac [-0.058, -0.018, 0.006]
 measuring I find the actual distance to be 2.7 m
 at 20.001 s we have position [-0.056, 0.036, 0.016], velocity [0.00297, 0.0046, 0.0148], calculated lac [0.0177, 0.0241, 0.00637]
+
+---------------------------------------------------------------------------------------------------------------------------------
+i think I've figured out that, given some rotation, the rotation angle around a given axis is the angle between the starting
+and ending vector when projected into the plane perpendicular to the axis. for example, suppose we rotate from (12, 5, 0) to (12, 3, 4).
+for rotation about the x-axis: projection into yz-plane is (5, 0) to (3, 4), so cos theta = 15 / 25
+y-axis: projection into zx-plane is (0, 12) to (4, 12), so cos theta = 144 / (12* sqrt(160))
+z-axis: projection into xy-plane is (12, 5) to (12, 3), so cos theta = 159 / (13 * sqrt(153))
+
+it appears that I am wrong:
+    [nibawr@amaranth ~]$ cat test
+    #!/usr/bin/env python
+
+    from math import acos, sqrt, asin
+    import numpy as np
+
+    rot_x = acos(15 / 25)
+    rot_y = -acos(144 / (12 * sqrt(160)))
+    rot_z = -acos(159 / (13 * sqrt(153)))
+    print(rot_x, rot_y, rot_z)
+
+    omega = sqrt(rot_x**2 + rot_y**2 + rot_z**2);
+    print(omega)
+
+    rot_axis = [theta / omega for theta in [rot_x, rot_y, rot_z]]
+    print(rot_axis)
+
+    v1 = np.array([12, 5, 0])
+    v2 = np.array([12, 3, 4])
+    cross = np.cross(v1, v2)
+    print(cross)
+
+    cross_norm = np.linalg.norm(cross)
+    computed_theta = asin(cross_norm / 169)
+    computed_theta_2 = acos(np.dot(v1, v2) / 169)
+    computed_rot_axis = cross / cross_norm
+    print(computed_theta)
+    print(computed_theta_2)
+    print(computed_rot_axis)
+    [nibawr@amaranth ~]$ ./test
+    0.9272952180016123 -0.3217505543966423 -0.14981245657289696
+    0.9928965770550378
+    [0.9339293129119237, -0.32405243590522237, -0.15088425122508267]
+    [ 20 -48 -24]
+    0.34572975194316435
+    0.34572975194316424
+    [ 0.34921515 -0.83811635 -0.41905818]
+anyway, doesn't matter; from looking at the rotation formulations in three dimensions wikipedia article, it appears that the
+gyroscope sensor returns the rotation vector
+
+first try with integrating the gyr data, on the 1 minute no movement recording (rec_20260707_152445):
+looks pretty good. on the final datapoint (27530), the entries that should in principle be 1 are 0.999 999 8.., 0.999 997..., and 0.999 997...
+the norms of the rows of the matrix are [0.9999999999999579, 0.9999999999999314, 0.9999999999998812]
+
+now going to try it on rec_20260708_205242:
+at 19.511 seconds / point 8800 all three lines of the rotation matrix are 0.999 999...
+at the last point 11903 / 26.391 seconds we have 0.999 889..., 0.999 914..., and 0.999 967...
+and the norms are [0.9999999999999795, 0.9999999999999758, 0.9999999999999676]
+so also looks good
+
+next: need to try some that include significant rotation; verify above failed test's conversion to rotation matrix
