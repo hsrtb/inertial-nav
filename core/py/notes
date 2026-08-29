@@ -324,3 +324,64 @@ though it won't make a difference.
 
 retrying rec_20260828_190440 with the trapezoid integrator: (0.22, [-0.053933, 0.005349, -0.99853]). differences are in
 the 4th and 5th decimal places. playback also looks good.
+
+---
+testing gravity calibration:
+    [148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_125309.csv 13
+    difference in number of points is 3
+    mean: [0.4100493248874188, 0.7375021943145299, 9.744837708034188]
+    sigma: [0.07316964316199986, 0.061814654259814555, 0.09633550031756163]
+    t: [5.6040908109877865, 11.930863371243944, 101.15520940786288]
+    magnitude 9.7813 at angle 0.086 rad / 4.9 deg
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20
+    difference in number of points is 2
+    mean: [0.169580671208, 0.05144814632688889, 9.782129251777778]
+    sigma: [0.013572373686777614, 0.010724211680080595, 0.014722955403829261]
+    t: [12.494547757199443, 4.797382582670379, 664.4134267521836]
+    magnitude 9.7837 at angle 0.018 rad / 1.0 deg
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 10
+    difference in number of points is 3
+    mean: [0.06439883396106222, 0.20122495078799998, 9.769079760555556]
+    sigma: [0.04773932871253141, 0.020269817843414837, 0.06962095928191385]
+    t: [1.3489681505336655, 9.927319147240043, 140.31808612400675]
+    magnitude 9.7714 at angle 0.022 rad / 1.2 deg
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260707_152445.csv 60
+    difference in number of points is 2
+    mean: [-0.014956648060318519, -0.03714808425965926, 9.771065032870371]
+    sigma: [0.01136227734259963, 0.014551877643873607, 0.02270405589148488]
+    t: [-1.3163424557718564, -2.552803505415587, 430.3664983724337]
+    magnitude 9.7711 at angle 0.004 rad / 0.2 deg
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_182912.csv 170
+    difference in number of points is 2
+    mean: [0.02444925962498039, -0.11122677106899347, 9.780397198228759]
+    sigma: [0.009321228548786292, 0.010031978020963134, 0.013792767311115874]
+    t: [2.6229653630973253, -11.087222363981514, 709.0960775033546]
+    magnitude 9.7811 at angle 0.012 rad / 0.7 deg
+
+reporting the max unconditionally:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_125309.csv 13
+    accelerometer clipped (max = 77.06205)
+    gyro clipped (max = 7.775704)
+    difference in number of points is 3
+    mean: [0.4100493248874188, 0.7375021943145299, 9.744837708034188]
+    sigma: [0.07316964316199986, 0.061814654259814555, 0.09633550031756163]
+    t: [5.6040908109877865, 11.930863371243944, 101.15520940786288]
+    magnitude 9.7813 at angle 0.086 rad / 4.9 deg
+so we should be nowhere close to maxing out the sensors.
+
+running the gyr+acc combination after fixing some bugs:
+    [nibawr@amaranth py]$ time ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide.json
+    difference in number of points is -1
+    mean: [0.16959084070355557, 0.05145977810411111, 9.782121807333333]
+    sigma: [0.013574372952309137, 0.010717379635221038, 0.014714920426975928]
+    t: [12.49345669957495, 4.801526105783953, 664.775719031439]
+    magnitude 9.7837 at angle 0.018 rad / 1.0 deg
+    rotation at final point (11902): (0.015, [-0.123193, 0.515023, -0.848277])
+    final point: [26.389208313077688, 0.18015690681734342, [0.1740966, -0.045356743, -0.009468411], [[0.9998899315437866, 0.012675061204194605, 0.007711525192311619], [-0.012689243546256626, 0.999917880809148, 0.0017929685812251503], [-0.007688165941598434, -0.0018906246532192665, 0.9999686583302592]], [0.11842734794026127, 0.06228607268583881, 0.09991490994298857], [0.14228693948793156, -0.1297210045695943, 0.004799303314666906], [1.127224834897573, 1.4163054465201268, 0.0037481564938593673]]
+
+    real    0m0.499s
+    user    0m0.469s
+    sys     0m0.028s
+
+this is worse than without the gyro correction. at 20.001 s we have position [0.483, -0.570, -0.005] so something is
+going wrong in the sitting still phase.

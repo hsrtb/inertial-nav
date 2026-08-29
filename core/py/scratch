@@ -3,20 +3,7 @@
 import sys, json, math;
 import numpy as np;
 
-f = open(sys.argv[1], 'r');
-
-assert(f.readline() == '# nav-recorder v1\n');
-#assert(f.readline() == '# device=Google Pixel 6 Pro android=16 sdk=36\n');
-
-data = dict();
-for line in f:
-    if line[0] == '#': continue;
-    arr = line[:-1].split(','); # strip \n
-    if arr[0] not in data: data[arr[0]] = list();
-    arr[1] = int(arr[1]);
-    arr[2] = int(arr[2]);
-    arr[3:] = [float(n) if n != '' else None for n in arr[3:]];
-    data[arr[0]].append(arr[1:]);
+# FUNCTIONS -----------------------------------------------------------------------------------
 
 def findmax(sensor):
     m = max(data[sensor][0][2:]);
@@ -24,21 +11,13 @@ def findmax(sensor):
         m = max(max(measurement[2:]), m);
     return m
 
-def dumpmaxes():
-    print('max acc: {}'.format(findmax('acc')));
-    print('max gyr: {}'.format(findmax('gyr')));
-    print('max lac: {}'.format(findmax('lac')));
-
-def findmaxdiff(sensor):
-    m = max([abs(b - a) for a,b in zip(data[sensor][0][2:], data[sensor][1][2:])]);
-    for i in range(2, len(data[sensor])):
-        m = max(max([abs(b - a) for a,b in zip(data[sensor][i-1][2:], data[sensor][i][2:])]), m);
-    return m
-
-def dumpmaxdiffs():
-    print('max diff acc: {}'.format(findmaxdiff('acc')));
-    print('max diff gyr: {}'.format(findmaxdiff('gyr')));
-    print('max diff lac: {}'.format(findmaxdiff('lac')));
+def findmatch():
+    # accelerometer seems to start first in the data I have
+    first_gyr = data['gyr'][0][0];
+    i = 0;
+    while data['acc'][i][0] != first_gyr and i < 6: i += 1;
+    if i == 6: raise Exception('no match to first gyro point within first 6 accelerometer points');
+    return i;
 
 # first, second := [time_sec, [vec]]
 def trapezoid(first, second):
@@ -60,15 +39,159 @@ def do_integrate(grav):
         output.append([time, lac, v, x]);
     return output;
 
-def lac_stats():
-    return stats(data['lac'], 2);
 def stats(data_, offset, limit):
     mean = [sum(data_[i][offset + j] for i in range(limit)) / limit for j in range(3)]
     sum_squared_residuals = [sum((data_[i][offset + j] - mean[j]) ** 2 for i in range(limit)) for j in range(3)]
     sigma = [math.sqrt(sum_squared_residuals[i] / (limit - 1)) for i in range(3)]
-    print("mean: {}".format(mean));
-    print("sigma: {}".format(sigma));
-    return mean;
+    return (mean, sigma);
+
+def omega(gyr):
+    return math.sqrt(sum(axis**2 for axis in gyr));
+
+def do_gyr_integrate():
+    # [time, omega, [gyr], [rotmat]]
+    # rotmat rotates a vector in that timepoint's device coordinates into the initial timepoint's device coordinates
+    limit = len(data['gyr']);
+    output = list();
+    time_start = data['gyr'][0][0] / 1e9;
+    output.append([0, omega(data['gyr'][0][2:]), data['gyr'][0][2:], [[1, 0, 0], [0, 1, 0], [0, 0, 1]]]);
+    for i in range(1, limit):
+        cur = [data['gyr'][i][0] / 1e9 - time_start, data['gyr'][i][2:]];
+        prev = [data['gyr'][i - 1][0] / 1e9 - time_start, data['gyr'][i - 1][2:]];
+        rot_vec = trapezoid(prev, cur);
+        theta = omega(rot_vec);
+        axis = [a / theta for a in rot_vec];
+        cos_ = math.cos(theta);
+        cos_2 = 1 - cos_;
+        sin_ = math.sin(theta);
+        rot_cur_to_prev = np.array([[cos_2 * axis[0]**2 + cos_, cos_2 * axis[0] * axis[1] - sin_ * axis[2], cos_2 * axis[0] * axis[2] + sin_ * axis[1]],
+                  [cos_2 * axis[1] * axis[0] + sin_ * axis[2], cos_2 * axis[1]**2 + cos_, cos_2 * axis[1] * axis[2] - sin_ * axis[0]],
+                  [cos_2 * axis[2] * axis[0] - sin_ * axis[1], cos_2 * axis[2] * axis[1] + sin_ * axis[0], cos_2 * axis[2]**2 + cos_]]);
+        rot_prev_to_orig = np.array(output[i - 1][3]);
+        rot_cur_to_orig = np.matmul(rot_prev_to_orig, rot_cur_to_prev).tolist();
+        # putting in omega for consistency with previous right-rule outputs. I don't think it really matters/is useful;
+        # I don't think I've looked at it at all.
+        output.append([cur[0], omega(data['gyr'][i][2:]), data['gyr'][i][2:], rot_cur_to_orig]);
+    return output;
+
+def do_combined_integrate(grav):
+    # [time, omega, [omega], [rotmat], [lac], [v], [x]]
+    limit = min(len(data['acc']), len(data['gyr']));
+    output = list();
+    time_start = data['acc'][0][0] / 1e9;
+    # findmatch() guarantees the first points have matching timestamps
+    output.append([0, omega(data['gyr'][0][2:]), data['gyr'][0][2:], [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                   [data['acc'][0][2:][j] - grav[j] for j in range(3)], [0,0,0], [0,0,0]]);
+    for i in range(1, limit):
+        if (diff := data['acc'][i][0] - data['gyr'][i][0]) != 0:
+            raise Exception("on i = {} diff is {} acc timestamp {} != gyr timestamp {}".format(i, diff, data['acc'][i][0], data['gyr'][i][0]));
+        cur = [data['gyr'][i][0] / 1e9 - time_start, data['gyr'][i][2:]];
+        prev = [data['gyr'][i - 1][0] / 1e9 - time_start, data['gyr'][i - 1][2:]];
+        rot_vec = trapezoid(prev, cur);
+        theta = omega(rot_vec);
+        axis = [a / theta for a in rot_vec];
+        cos_ = math.cos(theta);
+        cos_2 = 1 - cos_;
+        sin_ = math.sin(theta);
+        rot_cur_to_prev = np.array([[cos_2 * axis[0]**2 + cos_, cos_2 * axis[0] * axis[1] - sin_ * axis[2], cos_2 * axis[0] * axis[2] + sin_ * axis[1]],
+                  [cos_2 * axis[1] * axis[0] + sin_ * axis[2], cos_2 * axis[1]**2 + cos_, cos_2 * axis[1] * axis[2] - sin_ * axis[0]],
+                  [cos_2 * axis[2] * axis[0] - sin_ * axis[1], cos_2 * axis[2] * axis[1] + sin_ * axis[0], cos_2 * axis[2]**2 + cos_]]);
+        rot_prev_to_orig = np.array(output[i - 1][3]);
+        rot_cur_to_orig = np.matmul(rot_prev_to_orig, rot_cur_to_prev);
+        acc_orig = np.matmul(rot_cur_to_orig, np.array(data['acc'][i][2:])).tolist();
+        lac = [acc_orig[j] - grav[j] for j in range(3)];
+        delta_v = trapezoid([output[i - 1][0], output[i - 1][4]], [cur[0], lac]);
+        v = [output[i - 1][5][j] + delta_v[j] for j in range(3)];
+        delta_x = trapezoid([output[i - 1][0], output[i - 1][5]], [cur[0], v]);
+        x = [output[i - 1][6][j] + delta_x[j] for j in range(3)];
+        output.append([cur[0], omega(data['gyr'][i][2:]), data['gyr'][i][2:], rot_cur_to_orig.tolist(), lac, v, x]);
+    return output;
+
+def rotmat_to_axis_angle(R):
+    theta = math.acos((sum(R[i][i] for i in range(3)) - 1) / 2)
+    omega = [R[2][1] - R[1][2], R[0][2] - R[2][0], R[1][0] - R[0][1]];
+    factor = 1 / (2 * math.sin(theta))
+    omega = [factor * omega[i] for i in range(3)]
+    return (theta, omega)
+def rnd(x):
+    return (round(x[0], 3), [round(x[1][i], 6) for i in range(3)])
+
+# MAIN -------------------------------------------------------------------------------------------
+
+f = open(sys.argv[1], 'r');
+
+assert(f.readline() == '# nav-recorder v1\n');
+#assert(f.readline() == '# device=Google Pixel 6 Pro android=16 sdk=36\n');
+
+data = dict();
+for line in f:
+    if line[0] == '#': continue;
+    arr = line[:-1].split(','); # strip \n
+    if arr[0] not in data: data[arr[0]] = list();
+    arr[1] = int(arr[1]);
+    arr[2] = int(arr[2]);
+    arr[3:] = [float(n) if n != '' else None for n in arr[3:]];
+    data[arr[0]].append(arr[1:]);
+
+ACC_MAX = 156;
+GYR_MAX = 34;
+acc_max = findmax('acc');
+gyr_max = findmax('gyr');
+if acc_max >= ACC_MAX:
+    print("accelerometer clipped (max = {})".format(acc_max), file=sys.stderr);
+if gyr_max >= GYR_MAX:
+    print("gyro clipped (max = {})".format(gyr_max), file=sys.stderr);
+
+data['acc'] = data['acc'][findmatch():];
+assert(data['acc'][0][0] - data['gyr'][0][0] == 0);
+print('difference in number of points is {}'.format(len(data['acc']) - len(data['gyr'])), file=sys.stderr);
+
+calib_n = int(450 * float(sys.argv[2]));
+# calibrating without gyro transform
+mean, sigma = stats(data['acc'], 2, calib_n)
+print("mean: {}".format(mean), file=sys.stderr);
+print("sigma: {}".format(sigma), file=sys.stderr);
+t = [mean[i] / sigma[i] for i in range(3)];
+print("t: {}".format(t), file=sys.stderr);
+grav_mag = omega(mean);
+print("magnitude {:.4f} at angle {:.3f} rad / {:.1f} deg".format(grav_mag, math.acos(mean[2] / grav_mag), math.acos(mean[2] / grav_mag) * 180 / math.pi), file=sys.stderr);
+
+solution = do_combined_integrate(mean);
+print(json.dumps(solution));
+print("rotation at final point ({}): {}".format(len(solution) - 1, rnd(rotmat_to_axis_angle(solution[-1][3]))), file=sys.stderr);
+print("final point: {}".format(solution[-1]), file=sys.stderr);
+
+#gyr_integrate = do_gyr_integrate();
+#print(json.dumps(gyr_integrate));
+#print("rotation at point 1000: {}".format(rnd(rotmat_to_axis_angle(gyr_integrate[1000][3]))), file=sys.stderr);
+
+
+
+
+
+
+
+
+
+# UNUSED CODE --------------------------------------------------------------------
+def dumpmaxes():
+    print('max acc: {}'.format(findmax('acc')));
+    print('max gyr: {}'.format(findmax('gyr')));
+    print('max lac: {}'.format(findmax('lac')));
+
+def findmaxdiff(sensor):
+    m = max([abs(b - a) for a,b in zip(data[sensor][0][2:], data[sensor][1][2:])]);
+    for i in range(2, len(data[sensor])):
+        m = max(max([abs(b - a) for a,b in zip(data[sensor][i-1][2:], data[sensor][i][2:])]), m);
+    return m
+
+def dumpmaxdiffs():
+    print('max diff acc: {}'.format(findmaxdiff('acc')));
+    print('max diff gyr: {}'.format(findmaxdiff('gyr')));
+    print('max diff lac: {}'.format(findmaxdiff('lac')));
+
+def lac_stats():
+    return stats(data['lac'], 2);
 
 # TODO: test for consistency of reporting interval to see if should weight the average by the dt's
 # also need to assign timestamps
@@ -105,45 +228,3 @@ def findmaxdiff_2(vectors):
 #grav = [acc[i] - lac[i] for i in range(3)];
 #print("implied gravity is: {}\nwith magnitude: {}".format(grav, math.sqrt(sum(grav[i]**2 for i in range(3)))));
 #print(json.dumps(do_integrate(acc)));
-
-def omega(gyr):
-    return math.sqrt(sum(axis**2 for axis in gyr));
-
-def do_gyr_integrate():
-    # [time, omega, [gyr], [rotmat]]
-    # rotmat rotates a vector in that timepoint's device coordinates into the initial timepoint's device coordinates
-    limit = len(data['gyr']);
-    output = list();
-    time_start = data['gyr'][0][0] / 1e9;
-    output.append([0, omega(data['gyr'][0][2:]), data['gyr'][0][2:], [[1, 0, 0], [0, 1, 0], [0, 0, 1]]]);
-    for i in range(1, limit):
-        cur = [data['gyr'][i][0] / 1e9 - time_start, data['gyr'][i][2:]];
-        prev = [data['gyr'][i - 1][0] / 1e9 - time_start, data['gyr'][i - 1][2:]];
-        rot_vec = trapezoid(prev, cur);
-        theta = omega(rot_vec);
-        axis = [a / theta for a in rot_vec];
-        cos_ = math.cos(theta);
-        cos_2 = 1 - cos_;
-        sin_ = math.sin(theta);
-        rot_cur_to_prev = np.array([[cos_2 * axis[0]**2 + cos_, cos_2 * axis[0] * axis[1] - sin_ * axis[2], cos_2 * axis[0] * axis[2] + sin_ * axis[1]],
-                  [cos_2 * axis[1] * axis[0] + sin_ * axis[2], cos_2 * axis[1]**2 + cos_, cos_2 * axis[1] * axis[2] - sin_ * axis[0]],
-                  [cos_2 * axis[2] * axis[0] - sin_ * axis[1], cos_2 * axis[2] * axis[1] + sin_ * axis[0], cos_2 * axis[2]**2 + cos_]]);
-        rot_prev_to_orig = np.array(output[i - 1][3]);
-        rot_cur_to_orig = np.matmul(rot_prev_to_orig, rot_cur_to_prev).tolist();
-        # putting in omega for consistency with previous right-rule outputs. I don't think it really matters/is useful;
-        # I don't think I've looked at it at all.
-        output.append([cur[0], omega(data['gyr'][i][2:]), data['gyr'][i][2:], rot_cur_to_orig]);
-    return output;
-def rotmat_to_axis_angle(R):
-    theta = math.acos((sum(R[i][i] for i in range(3)) - 1) / 2)
-    omega = [R[2][1] - R[1][2], R[0][2] - R[2][0], R[1][0] - R[0][1]];
-    factor = 1 / (2 * math.sin(theta))
-    omega = [factor * omega[i] for i in range(3)]
-    return (theta, omega)
-def rnd(x):
-    return (round(x[0], 3), [round(x[1][i], 6) for i in range(3)])
-
-gyr_integrate = do_gyr_integrate();
-print(json.dumps(gyr_integrate));
-print("rotation at point 1000: {}".format(rnd(rotmat_to_axis_angle(gyr_integrate[1000][3]))), file=sys.stderr);
-print("rotation at final point ({}): {}".format(len(gyr_integrate) - 1, rnd(rotmat_to_axis_angle(gyr_integrate[-1][3]))), file=sys.stderr);
