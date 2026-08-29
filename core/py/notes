@@ -384,4 +384,116 @@ running the gyr+acc combination after fixing some bugs:
     sys     0m0.028s
 
 this is worse than without the gyro correction. at 20.001 s we have position [0.483, -0.570, -0.005] so something is
-going wrong in the sitting still phase.
+going wrong in the sitting still phase. in the slide phase we move [0.637, 1.98, 0.0087] = 2.08 m vs ground truth of 2.7
+m.
+
+i think i want to get the noise on the gyro-corrected accelerometer readings. have obtained:
+    for acc_origs
+    mean: [0.17309204920750654, 0.04728681448091618, 9.782081082614333]
+    sigma: [0.013629018447569747, 0.011063854955083142, 0.014714110060355598]
+    t: [12.700257899964276, 4.273990817205252, 664.8095632348375]
+which is not exactly the same as the uncorrected but is very close. lac is corrected - uncorrected, so now get the stats
+on lac:
+    for lac
+    mean: [0.003501208503950964, -0.004172963623194935, -4.0724719000226746e-05]
+    sigma: [0.013629018447569747, 0.011063854955083142, 0.014714110060355598]
+    t: [0.2568936653376737, -0.3771708541133506, -0.002767732389738734]
+the deviations from zero roughly match the position error. looks like they're not statistically significant - i.e. we
+have insufficient evidence to reliably conclude that the phone moved, but the double integration amplifies everything.
+    > 2 * (1 - pnorm(0.25))
+    [1] 0.8025873
+    > 2 * (1 - pnorm(0.377))
+    [1] 0.7061736
+I wonder if in a longer recording the noise would cancel out better. ...and we hit a divide by zero!
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_182912.csv 180 > still.json
+    difference in number of points is 0
+    mean: [0.024380536371584195, -0.11121996931432097, 9.780468264777777]
+    sigma: [0.009333540169091855, 0.01002501415711398, 0.013918838709891726]
+    t: [2.612142437905895, -11.094245611154248, 702.678468270997]
+    magnitude 9.7811 at angle 0.012 rad / 0.7 deg
+    Traceback (most recent call last):
+      File "/home/nibawr/code/apps/nav/core/py/./scratch", line 165, in <module>
+        solution, acc_origs = do_combined_integrate(mean);
+                              ~~~~~~~~~~~~~~~~~~~~~^^^^^^
+      File "/home/nibawr/code/apps/nav/core/py/./scratch", line 94, in do_combined_integrate
+        axis = [a / theta for a in rot_vec];
+                ~~^~~~~~~
+    ZeroDivisionError: division by zero
+updating the script to give some information, looks like there are consecutive gyro readings that are exact opposites:
+    !!! DIVIDE BY ZERO !!!
+    i = 43407
+    cur = [96.23540228279307, [-0.0018325958, -0.0, -0.0]]
+    prev = [96.2331862798892, [0.0018325958, -0.0, -0.0]]
+    rot_vec = [0.0, -0.0, -0.0]
+the position calculated for the last point before the error (96.233186 sec) was [-6.298, 19.324, -4.561], so clearly the
+problem does not go away with a longer recording.
+
+changed the script to special-case theta=0 to rot_cur_to_prev = np.eye(3); now get:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_182912.csv 180 > still.json
+    difference in number of points is 0
+    mean: [0.024380536371584195, -0.11121996931432097, 9.780468264777777]
+    sigma: [0.009333540169091855, 0.01002501415711398, 0.013918838709891726]
+    t: [2.612142437905895, -11.094245611154248, 702.678468270997]
+    magnitude 9.7811 at angle 0.012 rad / 0.7 deg
+    !!! DIVIDE BY ZERO !!!
+    i = 43407
+    cur = [96.23540228279307, [-0.0018325958, -0.0, -0.0]]
+    prev = [96.2331862798892, [0.0018325958, -0.0, -0.0]]
+    rot_vec = [0.0, -0.0, -0.0]
+    !!! DIVIDE BY ZERO !!!
+    i = 43481
+    cur = [96.39946209779009, [-0.00061086525, -0.0, -0.0]]
+    prev = [96.39724511792883, [0.00061086525, -0.0, -0.0]]
+    rot_vec = [0.0, -0.0, -0.0]
+    !!! DIVIDE BY ZERO !!!
+    i = 43654
+    cur = [96.78300903365016, [0.0018325958, -0.0, -0.0]]
+    prev = [96.78079150384292, [-0.0018325958, -0.0, -0.0]]
+    rot_vec = [0.0, -0.0, -0.0]
+    !!! DIVIDE BY ZERO !!!
+    i = 43674
+    cur = [96.82734881574288, [0.00061086525, -0.0012217305, -0.0012217305]]
+    prev = [96.82512078760192, [-0.00061086525, 0.0012217305, 0.0012217305]]
+    rot_vec = [0.0, 0.0, 0.0]
+    !!! DIVIDE BY ZERO !!!
+    i = 43755
+    cur = [97.00692822271958, [-0.00061086525, -0.0, 0.0012217305]]
+    prev = [97.00471093785018, [0.00061086525, -0.0, -0.0012217305]]
+    rot_vec = [0.0, -0.0, 0.0]
+    !!! DIVIDE BY ZERO !!!
+    i = 43797
+    cur = [97.10004345700145, [-0.00061086525, -0.0, -0.0]]
+    prev = [97.09782629366964, [0.00061086525, -0.0, -0.0]]
+    rot_vec = [0.0, -0.0, -0.0]
+    !!! DIVIDE BY ZERO !!!
+    i = 97545
+    cur = [216.26073815859854, [0.00061086525, -0.0, -0.0]]
+    prev = [216.25852069072425, [-0.00061086525, -0.0, -0.0]]
+    rot_vec = [0.0, -0.0, -0.0]
+    rotation at final point (97579): (0.001, [-0.437527, -0.799233, -0.412063])
+    final point: [216.33611828600988, 0.1446715238023, [0.118966006, -0.08200866, -0.0071776668], [[0.9999992782579047, 0.0005508799429147891, -0.001067714521412303], [-0.0005502556722154463, 0.9999996775635277, 0.0005848850086392031], [0.0010680363785702184, -0.0005842970705331982, 0.9999992589468683]], [-0.009314143758071535, 0.12988044801416396, -0.3533331064066889], [-0.4345491898935897, 1.9760668199472662, -0.03734436566540071], [-31.395982619696312, 181.00447066016292, -5.335073458968948]]
+    for acc_origs
+    mean: [0.02278867197483393, -0.10205843820970302, 9.780570674904737]
+    sigma: [0.009584129329834065, 0.011023453011110337, 0.01392025345634176]
+    t: [2.3777508827949507, -9.258300290012592, 702.6144104042104]
+    for lac
+    mean: [-0.0015918643967502658, 0.009161531104617938, 0.0001024101269602601]
+    sigma: [0.009584129329834065, 0.011023453011110337, 0.01392025345634176]
+    t: [-0.16609379339185384, 0.8310944942010636, 0.007356915395359005]
+the lac deviations are still not statistically significant:
+    > 2 * (1 - pnorm(0.166))
+    [1] 0.868157
+    > 2 * (1 - pnorm(0.831))
+    [1] 0.4059736
+but the y-axis one is larger in absolute terms.
+
+we know from earlier that integrating acc - mean(acc) gives ~6 cm of drift in the 19 seconds. the 183 m came from
+integrating lac = acc_orig - mean(acc). so let's try getting the stats for acc_orig - mean(acc_orig):
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_182912.csv 180 > still.json
+    [...]
+    for acc_orig - mean(acc_orig)
+    mean: [6.958168609195859e-19, -1.6283528023906143e-17, 2.6480875105874105e-16]
+    sigma: [0.009584129329834065, 0.011023453011110337, 0.01392025345634176]
+    t: [7.260094652036931e-17, -1.4771712645297504e-15, 1.9023270796703778e-14]
+so the noise is the same, but we now have mean = 0 by definition. TODO: investigate why all the noise didn't just cancel
+out for acc_orig - mean(acc)
