@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>nav — gyro orientation playback</title>
+<style>
+  :root {
+    --bg: #14181d; --panel: #1c2228; --line: #2c343d; --fg: #d8dee5;
+    --dim: #7e8b98; --accent: #5dade2; --warn: #e59866;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg); overflow: hidden;
+    font: 13px/1.45 ui-monospace, "DejaVu Sans Mono", Menlo, monospace;
+  }
+  #app { display: flex; height: 100%; }
+  #left { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #stage { flex: 1; position: relative; min-height: 0; }
+  #view { display: block; width: 100%; height: 100%; }
+  #drop {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; text-align: center; background: rgba(20,24,29,.92);
+    cursor: pointer; padding: 24px;
+  }
+  #drop.hide { display: none; }
+  #drop.over { background: rgba(93,173,226,.15); outline: 2px dashed var(--accent); outline-offset: -12px; }
+  #drop h1 { font-size: 15px; margin: 0 0 10px; font-weight: 600; }
+  #drop p { margin: 4px 0; color: var(--dim); }
+  #bottom { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 10px 10px; }
+  #chart { display: block; width: 100%; height: 92px; cursor: crosshair; }
+  #scrub { width: 100%; margin: 8px 0 6px; accent-color: var(--accent); }
+  #transport { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #right {
+    width: 330px; border-left: 1px solid var(--line); background: var(--panel);
+    overflow-y: auto; padding: 10px 12px 40px;
+  }
+  h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--dim); margin: 18px 0 7px; font-weight: 600;
+  }
+  h2:first-child { margin-top: 0; }
+  button {
+    background: #2a323a; color: var(--fg); border: 1px solid var(--line);
+    border-radius: 3px; padding: 4px 9px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  button:hover { background: #35404a; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #10161d; }
+  .row { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin: 5px 0; }
+  label { color: var(--dim); }
+  textarea {
+    width: 100%; height: 58px; background: #10161d; color: var(--fg); resize: vertical;
+    border: 1px solid var(--line); border-radius: 3px; padding: 5px 6px;
+    font: inherit; font-size: 12px; white-space: pre;
+  }
+  textarea.bad { border-color: #c0392b; }
+  select, input[type=number] {
+    background: #10161d; color: var(--fg); border: 1px solid var(--line);
+    border-radius: 3px; padding: 3px 5px; font: inherit; font-size: 12px;
+  }
+  table.read { width: 100%; border-collapse: collapse; }
+  table.read td { padding: 2px 0; vertical-align: top; }
+  table.read td:first-child { color: var(--dim); width: 96px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .note { color: var(--dim); font-size: 11px; margin: 6px 0 0; }
+  .err { color: #e74c3c; }
+  .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="left">
+    <div id="stage">
+      <canvas id="view"></canvas>
+      <div id="drop">
+        <div>
+          <h1>drop a gyro-integration JSON here</h1>
+          <p>or click to pick a file</p>
+          <p>expects <code>[[t, |w|, gyr, rotmat], ...]</code> — rotmat maps device &rarr; world</p>
+          <p id="loadmsg"></p>
+        </div>
+      </div>
+    </div>
+    <div id="bottom">
+      <canvas id="chart"></canvas>
+      <input id="scrub" type="range" min="0" max="10000" value="0" step="1">
+      <div id="transport">
+        <button id="play">play</button>
+        <button id="tostart">|&lt;</button>
+        <button id="stepb">&lt;</button>
+        <button id="stepf">&gt;</button>
+        <label>speed</label>
+        <select id="speed">
+          <option>0.1</option><option>0.25</option><option>0.5</option>
+          <option selected>1</option><option>2</option><option>4</option><option>10</option>
+        </select>
+        <label><input type="checkbox" id="loop" checked> loop</label>
+        <span style="flex:1"></span>
+        <span id="clock" class="num dim"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="right">
+    <h2>readout</h2>
+    <table class="read">
+      <tr><td>file</td><td><span id="r-file">&mdash;</span> <button id="reload" style="float:right">open…</button></td></tr>
+      <tr><td>samples</td><td id="r-n" class="num">&mdash;</td></tr>
+      <tr><td>rate</td><td id="r-rate" class="num">&mdash;</td></tr>
+      <tr><td>time</td><td id="r-t" class="num">&mdash;</td></tr>
+      <tr><td>|&omega;|</td><td id="r-w" class="num">&mdash;</td></tr>
+      <tr><td>angle</td><td id="r-ang" class="num">&mdash;</td></tr>
+      <tr><td>axis</td><td id="r-axis" class="num">&mdash;</td></tr>
+      <tr><td>det(R)</td><td id="r-det" class="num">&mdash;</td></tr>
+      <tr><td>&#8214;R&#7488;R&minus;I&#8214;</td><td id="r-orth" class="num">&mdash;</td></tr>
+    </table>
+    <p class="note">det and orthogonality are from the raw matrix in the file, so they measure drift in your
+      integration, not in the viewer.</p>
+
+    <h2>source matrix</h2>
+    <div class="row">
+      <label><input type="checkbox" id="transposeR"> use R&#7488; instead of R</label>
+    </div>
+    <p class="note">flip this if the phone appears to rotate the wrong way &mdash; it swaps
+      device&rarr;world for world&rarr;device.</p>
+
+    <h2>world transform W</h2>
+    <textarea id="matW">1 0 0
+0 1 0
+0 0 1</textarea>
+    <div class="row">
+      <button data-mat="W" data-op="I">I</button>
+      <button data-mat="W" data-op="T">transpose</button>
+      <button data-mat="W" data-op="x">X+90</button>
+      <button data-mat="W" data-op="y">Y+90</button>
+      <button data-mat="W" data-op="z">Z+90</button>
+      <button id="zerohere">zero here</button>
+    </div>
+
+    <h2>device transform B</h2>
+    <textarea id="matB">1 0 0
+0 1 0
+0 0 1</textarea>
+    <div class="row">
+      <button data-mat="B" data-op="I">I</button>
+      <button data-mat="B" data-op="T">transpose</button>
+      <button data-mat="B" data-op="x">X+90</button>
+      <button data-mat="B" data-op="y">Y+90</button>
+      <button data-mat="B" data-op="z">Z+90</button>
+    </div>
+    <p class="note">rendered orientation is <b>W &middot; R &middot; B</b>. W re-datums the world frame
+      (e.g. leveling against gravity); B fixes a mount/axis-convention error on the device side.
+      &ldquo;zero here&rdquo; sets W so the current frame renders as identity.</p>
+
+    <h2>camera</h2>
+    <div class="row">
+      <button data-cam="pz">+Z (screen)</button>
+      <button data-cam="nz">&minus;Z (back)</button>
+      <button data-cam="px">+X</button>
+      <button data-cam="py">+Y</button>
+      <button data-cam="iso">iso</button>
+    </div>
+    <p class="note">drag to orbit, scroll to zoom. world axes are drawn faint through the origin;
+      the bright triad is body-fixed.</p>
+
+    <h2>chart series</h2>
+    <div class="row">
+      <label><input type="checkbox" class="series" value="w" checked>
+        <span class="swatch" style="background:#e59866"></span>|&omega;|</label>
+      <label><input type="checkbox" class="series" value="a" checked>
+        <span class="swatch" style="background:#5dade2"></span>angle</label>
+      <label><input type="checkbox" class="series" value="o">
+        <span class="swatch" style="background:#e74c3c"></span>ortho err</label>
+    </div>
+
+    <h2>keys</h2>
+    <p class="note">space play/pause &middot; &larr;/&rarr; step frame &middot; shift+&larr;/&rarr; 0.5&nbsp;s
+      &middot; home restart</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- 3x3 matrix / quaternion math (row-major, m[r][c]) ---------- */
+
+function matIdent() { return [[1,0,0],[0,1,0],[0,0,1]]; }
+
+function matMul(a, b) {
+  const o = [[0,0,0],[0,0,0],[0,0,0]];
+  for (let r = 0; r < 3; r++)
+    for (let c = 0; c < 3; c++)
+      o[r][c] = a[r][0]*b[0][c] + a[r][1]*b[1][c] + a[r][2]*b[2][c];
+  return o;
+}
+
+function matT(m) {
+  return [[m[0][0],m[1][0],m[2][0]],
+          [m[0][1],m[1][1],m[2][1]],
+          [m[0][2],m[1][2],m[2][2]]];
+}
+
+function matApply(m, v) {
+  return [m[0][0]*v[0] + m[0][1]*v[1] + m[0][2]*v[2],
+          m[1][0]*v[0] + m[1][1]*v[1] + m[1][2]*v[2],
+          m[2][0]*v[0] + m[2][1]*v[1] + m[2][2]*v[2]];
+}
+
+function matDet(m) {
+  return m[0][0]*(m[1][1]*m[2][2] - m[1][2]*m[2][1])
+       - m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0])
+       + m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]);
+}
+
+// Frobenius norm of R^T R - I; zero for a perfectly orthonormal matrix.
+function orthoErr(m) {
+  let s = 0;
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++) {
+      const d = m[0][i]*m[0][j] + m[1][i]*m[1][j] + m[2][i]*m[2][j] - (i === j ? 1 : 0);
+      s += d*d;
+    }
+  return Math.sqrt(s);
+}
+
+function rotAxis(axis, deg) {
+  const t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+  if (axis === "x") return [[1,0,0],[0,c,-s],[0,s,c]];
+  if (axis === "y") return [[c,0,s],[0,1,0],[-s,0,c]];
+  return [[c,-s,0],[s,c,0],[0,0,1]];
+}
+
+// Shepperd's method: pick the largest-magnitude branch for numerical stability.
+function quatFromMat(m, out, off) {
+  const t = m[0][0] + m[1][1] + m[2][2];
+  let w, x, y, z, s;
+  if (t > 0) {
+    s = Math.sqrt(t + 1) * 2;
+    w = 0.25 * s; x = (m[2][1] - m[1][2]) / s; y = (m[0][2] - m[2][0]) / s; z = (m[1][0] - m[0][1]) / s;
+  } else if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) {
+    s = Math.sqrt(1 + m[0][0] - m[1][1] - m[2][2]) * 2;
+    w = (m[2][1] - m[1][2]) / s; x = 0.25 * s; y = (m[0][1] + m[1][0]) / s; z = (m[0][2] + m[2][0]) / s;
+  } else if (m[1][1] > m[2][2]) {
+    s = Math.sqrt(1 + m[1][1] - m[0][0] - m[2][2]) * 2;
+    w = (m[0][2] - m[2][0]) / s; x = (m[0][1] + m[1][0]) / s; y = 0.25 * s; z = (m[1][2] + m[2][1]) / s;
+  } else {
+    s = Math.sqrt(1 + m[2][2] - m[0][0] - m[1][1]) * 2;
+    w = (m[1][0] - m[0][1]) / s; x = (m[0][2] + m[2][0]) / s; y = (m[1][2] + m[2][1]) / s; z = 0.25 * s;
+  }
+  const n = Math.hypot(w, x, y, z) || 1;
+  out[off] = w/n; out[off+1] = x/n; out[off+2] = y/n; out[off+3] = z/n;
+}
+
+function matFromQuat(q) {
+  const w = q[0], x = q[1], y = q[2], z = q[3];
+  return [
+    [1 - 2*(y*y + z*z),     2*(x*y - w*z),     2*(x*z + w*y)],
+    [    2*(x*y + w*z), 1 - 2*(x*x + z*z),     2*(y*z - w*x)],
+    [    2*(x*z - w*y),     2*(y*z + w*x), 1 - 2*(x*x + y*y)]
+  ];
+}
+
+function slerp(q, ia, ib, u) {
+  const a0 = q[4*ia], a1 = q[4*ia+1], a2 = q[4*ia+2], a3 = q[4*ia+3];
+  let b0 = q[4*ib], b1 = q[4*ib+1], b2 = q[4*ib+2], b3 = q[4*ib+3];
+  let d = a0*b0 + a1*b1 + a2*b2 + a3*b3;
+  if (d < 0) { d = -d; b0 = -b0; b1 = -b1; b2 = -b2; b3 = -b3; }
+  let s0, s1;
+  if (d > 0.9995) {                       // nearly parallel: lerp, then renormalize
+    s0 = 1 - u; s1 = u;
+  } else {
+    const th = Math.acos(d), st = Math.sin(th);
+    s0 = Math.sin((1 - u) * th) / st;
+    s1 = Math.sin(u * th) / st;
+  }
+  const o = [s0*a0 + s1*b0, s0*a1 + s1*b1, s0*a2 + s1*b2, s0*a3 + s1*b3];
+  const n = Math.hypot(o[0], o[1], o[2], o[3]) || 1;
+  return [o[0]/n, o[1]/n, o[2]/n, o[3]/n];
+}
+
+// Rotation angle and axis of a rotation matrix, robust near 0 and pi via the quaternion.
+function axisAngle(m) {
+  const q = new Float32Array(4);
+  quatFromMat(m, q, 0);
+  const w = Math.min(1, Math.abs(q[0]));
+  const ang = 2 * Math.acos(w);
+  const s = Math.sqrt(1 - w*w);
+  const sgn = q[0] < 0 ? -1 : 1;
+  if (s < 1e-8) return { ang: 0, axis: [0, 0, 1] };
+  return { ang: ang, axis: [sgn*q[1]/s, sgn*q[2]/s, sgn*q[3]/s] };
+}
+
+function parseMat(text) {
+  const n = text.trim().split(/[\s,;[\]]+/).filter(s => s.length).map(Number);
+  if (n.length !== 9 || n.some(v => !isFinite(v))) return null;
+  return [[n[0],n[1],n[2]], [n[3],n[4],n[5]], [n[6],n[7],n[8]]];
+}
+
+function fmtMat(m) {
+  const w = v => (v >= 0 ? " " : "") + v.toFixed(6);
+  return m.map(r => r.map(w).join(" ")).join("\n");
+}
+
+/* ---------- phone geometry (device frame: +X right, +Y top, +Z out of screen) ---------- */
+
+const HX = 0.36, HY = 0.78, HZ = 0.042;   // half-extents, roughly a 72 x 156 x 8 mm phone
+
+const VERTS = [];
+for (let i = 0; i < 8; i++)
+  VERTS.push([(i & 1 ? 1 : -1) * HX, (i & 2 ? 1 : -1) * HY, (i & 4 ? 1 : -1) * HZ]);
+
+const FACES = [
+  { idx: [1,3,7,5], n: [ 1, 0, 0], col: "#e74c3c", label: "+X" },
+  { idx: [0,4,6,2], n: [-1, 0, 0], col: "#922b21", label: "−X" },
+  { idx: [2,6,7,3], n: [ 0, 1, 0], col: "#2ecc71", label: "+Y" },
+  { idx: [0,1,5,4], n: [ 0,-1, 0], col: "#196f3d", label: "−Y" },
+  { idx: [4,5,7,6], n: [ 0, 0, 1], col: "#5d6d7e", label: "" },        // screen side
+  { idx: [0,2,3,1], n: [ 0, 0,-1], col: "#aeb6bd", label: "" }         // back
+];
+
+function shade(hex, k) {
+  const v = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, ((v >> 16) & 255) * k) | 0;
+  const g = Math.min(255, ((v >> 8) & 255) * k) | 0;
+  const b = Math.min(255, (v & 255) * k) | 0;
+  return "rgb(" + r + "," + g + "," + b + ")";
+}
+
+/* ---------- state ---------- */
+
+const D = {
+  name: "", n: 0, times: null, quats: null, omega: null, angle: null,
+  det: null, orth: null, t0: 0, t1: 0, rate: 0,
+  maxW: 1, maxA: 1, maxO: 1
+};
+
+const S = {
+  t: 0, playing: false, speed: 1, loop: true, hint: 0,
+  az: 28, el: 16, dist: 4.4,
+  W: matIdent(), B: matIdent(), transposeR: false,
+  series: { w: true, a: true, o: false }
+};
+
+/* ---------- loading ---------- */
+
+function ingest(text, name) {
+  const raw = JSON.parse(text);
+  if (!Array.isArray(raw) || !raw.length) throw new Error("expected a non-empty JSON array");
+  const n = raw.length;
+  const times = new Float64Array(n);
+  const quats = new Float32Array(4 * n);
+  const omega = new Float32Array(n);
+  const angle = new Float32Array(n);
+  const det   = new Float32Array(n);
+  const orth  = new Float32Array(n);
+
+  for (let i = 0; i < n; i++) {
+    const e = raw[i];
+    const m = e[e.length - 1];
+    if (!m || m.length !== 3 || !m[0] || m[0].length !== 3)
+      throw new Error("entry " + i + ": last field is not a 3x3 matrix");
+    times[i] = e[0];
+    omega[i] = typeof e[1] === "number" ? e[1] : 0;
+    det[i] = matDet(m);
+    orth[i] = orthoErr(m);
+    quatFromMat(m, quats, 4*i);
+    // keep the quaternion sign continuous with the previous sample so slerp never
+    // takes the long way around and the angle trace has no artificial jumps
+    if (i > 0) {
+      const d = quats[4*i]*quats[4*i-4] + quats[4*i+1]*quats[4*i-3]
+              + quats[4*i+2]*quats[4*i-2] + quats[4*i+3]*quats[4*i-1];
+      if (d < 0) for (let k = 0; k < 4; k++) quats[4*i+k] = -quats[4*i+k];
+    }
+    angle[i] = 2 * Math.acos(Math.min(1, Math.abs(quats[4*i])));
+  }
+
+  D.name = name; D.n = n;
+  D.times = times; D.quats = quats; D.omega = omega;
+  D.angle = angle; D.det = det; D.orth = orth;
+  D.t0 = times[0]; D.t1 = times[n-1];
+  D.rate = n > 1 ? (n - 1) / (D.t1 - D.t0) : 0;
+  D.maxW = Math.max(1e-9, ...maxOf(omega));
+  D.maxA = Math.max(1e-9, ...maxOf(angle));
+  D.maxO = Math.max(1e-12, ...maxOf(orth));
+  S.t = D.t0; S.hint = 0;
+}
+
+// max in chunks; Math.max(...arr) blows the stack on large arrays
+function maxOf(arr) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += 4096) {
+    let m = -Infinity;
+    const end = Math.min(arr.length, i + 4096);
+    for (let j = i; j < end; j++) if (arr[j] > m) m = arr[j];
+    out.push(m);
+  }
+  return out.length ? out : [0];
+}
+
+/* ---------- sampling ---------- */
+
+function locate(t) {
+  const T = D.times, n = D.n;
+  if (t <= T[0]) return 0;
+  if (t >= T[n-1]) return n - 2 < 0 ? 0 : n - 2;
+  let i = S.hint;
+  if (!(i >= 0 && i < n - 1 && T[i] <= t && t < T[i+1])) {
+    if (i + 1 < n - 1 && T[i+1] <= t && t < T[i+2]) {
+      i = i + 1;                                  // common case during playback
+    } else {
+      let lo = 0, hi = n - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (T[mid] <= t) lo = mid; else hi = mid; }
+      i = lo;
+    }
+  }
+  S.hint = i;
+  return i;
+}
+
+// Interpolated source orientation at time t, before W and B are applied.
+function sampleR(t) {
+  const i = locate(t);
+  const T = D.times;
+  const span = T[i+1] - T[i];
+  const u = span > 0 ? Math.min(1, Math.max(0, (t - T[i]) / span)) : 0;
+  const m = matFromQuat(slerp(D.quats, i, i + 1, u));
+  return S.transposeR ? matT(m) : m;
+}
+
+function displayR(t) {
+  return matMul(matMul(S.W, sampleR(t)), S.B);
+}
+
+/* ---------- init / DOM ---------- */
+
+function init() {
+  const $ = id => document.getElementById(id);
+  const view = $("view"), chart = $("chart"), drop = $("drop");
+  const vctx = view.getContext("2d"), cctx = chart.getContext("2d");
+  const scrub = $("scrub"), playBtn = $("play");
+  const strip = document.createElement("canvas");   // offscreen chart cache
+  const sctx = strip.getContext("2d");
+  let dpr = 1, VW = 0, VH = 0, CW = 0, CH = 0;
+
+  /* --- sizing --- */
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    VW = view.clientWidth; VH = view.clientHeight;
+    view.width = Math.max(1, VW * dpr | 0); view.height = Math.max(1, VH * dpr | 0);
+    vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    CW = chart.clientWidth; CH = chart.clientHeight;
+    chart.width = Math.max(1, CW * dpr | 0); chart.height = Math.max(1, CH * dpr | 0);
+    cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    strip.width = Math.max(1, CW * dpr | 0); strip.height = Math.max(1, CH * dpr | 0);
+    sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    buildStrip();
+    invalidate();
+  }
+  new ResizeObserver(resize).observe(view);
+  new ResizeObserver(resize).observe(chart);
+
+  /* --- file loading --- */
+  const picker = document.createElement("input");
+  picker.type = "file"; picker.accept = ".json,application/json";
+  picker.addEventListener("change", () => { if (picker.files[0]) load(picker.files[0]); });
+  drop.addEventListener("click", () => picker.click());
+  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", e => {
+    e.preventDefault(); e.stopPropagation();      // window also listens; don't load twice
+    drop.classList.remove("over");
+    if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+  });
+  // once a file is open the overlay is hidden, so keep drop and the picker working page-wide
+  window.addEventListener("dragover", e => e.preventDefault());
+  window.addEventListener("drop", e => {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+  });
+  $("reload").addEventListener("click", () => picker.click());
+
+  async function load(file) {
+    const msg = $("loadmsg");
+    msg.className = "";
+    msg.textContent = "reading " + file.name + " (" + (file.size / 1048576).toFixed(1) + " MB)…";
+    try {
+      const text = await file.text();
+      msg.textContent = "parsing…";
+      await new Promise(r => setTimeout(r, 0));      // let the message paint
+      ingest(text, file.name);
+      drop.classList.add("hide");
+      S.playing = false; playBtn.textContent = "play";
+      $("r-file").textContent = D.name;
+      $("r-n").textContent = D.n.toLocaleString();
+      $("r-rate").textContent = D.rate.toFixed(1) + " Hz";
+      buildStrip();
+      invalidate();
+    } catch (err) {
+      msg.className = "err";
+      msg.textContent = err && /allocation|heap|memory|Invalid string length/i.test(String(err.message))
+        ? "out of memory parsing that file — run decimate.py on it first"
+        : "load failed: " + (err && err.message ? err.message : String(err));
+    }
+  }
+
+  /* --- chart --- */
+  function buildStrip() {
+    sctx.clearRect(0, 0, CW, CH);
+    if (!D.n) return;
+    const pad = 3, h = CH - 2 * pad;
+    const series = [];
+    if (S.series.w) series.push({ arr: D.omega, max: D.maxW, col: "#e59866" });
+    if (S.series.a) series.push({ arr: D.angle, max: D.maxA, col: "#5dade2" });
+    if (S.series.o) series.push({ arr: D.orth,  max: D.maxO, col: "#e74c3c" });
+
+    sctx.strokeStyle = "#2c343d"; sctx.lineWidth = 1;
+    sctx.beginPath(); sctx.moveTo(0, CH - pad + .5); sctx.lineTo(CW, CH - pad + .5); sctx.stroke();
+
+    // one vertical min/max bar per pixel column, so cost is O(n) regardless of zoom
+    for (const s of series) {
+      sctx.strokeStyle = s.col; sctx.lineWidth = 1;
+      sctx.beginPath();
+      for (let px = 0; px < CW; px++) {
+        const a = Math.floor(px * D.n / CW), b = Math.max(a + 1, Math.floor((px + 1) * D.n / CW));
+        let lo = Infinity, hi = -Infinity;
+        for (let i = a; i < b && i < D.n; i++) { const v = s.arr[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+        if (lo === Infinity) continue;
+        const y0 = CH - pad - (hi / s.max) * h, y1 = CH - pad - (lo / s.max) * h;
+        sctx.moveTo(px + .5, y0); sctx.lineTo(px + .5, Math.max(y1, y0 + .6));
+      }
+      sctx.stroke();
+    }
+    sctx.fillStyle = "#7e8b98"; sctx.font = "10px ui-monospace, monospace";
+    let lx = 5;
+    const legend = [];
+    if (S.series.w) legend.push(["|w| max " + D.maxW.toFixed(2) + " rad/s", "#e59866"]);
+    if (S.series.a) legend.push(["angle max " + (D.maxA * 180 / Math.PI).toFixed(0) + "°", "#5dade2"]);
+    if (S.series.o) legend.push(["ortho max " + D.maxO.toExponential(1), "#e74c3c"]);
+    for (const [txt, col] of legend) { sctx.fillStyle = col; sctx.fillText(txt, lx, 11); lx += sctx.measureText(txt).width + 12; }
+  }
+
+  function drawChart() {
+    cctx.clearRect(0, 0, CW, CH);
+    cctx.drawImage(strip, 0, 0, CW, CH);
+    if (!D.n) return;
+    const f = (S.t - D.t0) / Math.max(1e-9, D.t1 - D.t0);
+    const x = Math.round(f * CW) + .5;
+    cctx.strokeStyle = "#f4f6f7"; cctx.lineWidth = 1;
+    cctx.beginPath(); cctx.moveTo(x, 0); cctx.lineTo(x, CH); cctx.stroke();
+  }
+
+  function seekFromChart(ev) {
+    if (!D.n) return;
+    const r = chart.getBoundingClientRect();
+    const f = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+    S.t = D.t0 + f * (D.t1 - D.t0);
+  }
+  let chartDrag = false;
+  chart.addEventListener("pointerdown", e => { chartDrag = true; chart.setPointerCapture(e.pointerId); seekFromChart(e); });
+  chart.addEventListener("pointermove", e => { if (chartDrag) seekFromChart(e); });
+  chart.addEventListener("pointerup", () => { chartDrag = false; });
+
+  /* --- 3D --- */
+  function project(p, cam) {
+    const dx = p[0] - cam.pos[0], dy = p[1] - cam.pos[1], dz = p[2] - cam.pos[2];
+    const z = dx*cam.f[0] + dy*cam.f[1] + dz*cam.f[2];
+    if (z < 0.05) return null;
+    const x = dx*cam.r[0] + dy*cam.r[1] + dz*cam.r[2];
+    const y = dx*cam.u[0] + dy*cam.u[1] + dz*cam.u[2];
+    return [VW/2 + cam.scale * x / z, VH/2 - cam.scale * y / z, z];
+  }
+
+  function makeCam() {
+    const az = S.az * Math.PI / 180, el = S.el * Math.PI / 180;
+    const pos = [S.dist * Math.cos(el) * Math.sin(az), S.dist * Math.sin(el), S.dist * Math.cos(el) * Math.cos(az)];
+    const L = Math.hypot(pos[0], pos[1], pos[2]) || 1;
+    const f = [-pos[0]/L, -pos[1]/L, -pos[2]/L];
+    let r = [-f[2], 0, f[0]];                          // cross(f, worldUp=[0,1,0])
+    const rl = Math.hypot(r[0], r[1], r[2]) || 1;
+    r = [r[0]/rl, r[1]/rl, r[2]/rl];
+    const u = [r[1]*f[2] - r[2]*f[1], r[2]*f[0] - r[0]*f[2], r[0]*f[1] - r[1]*f[0]];
+    const scale = (VH / 2) / Math.tan(20 * Math.PI / 180);
+    return { pos, f, r, u, scale };
+  }
+
+  function poly(pts, fill, stroke) {
+    vctx.beginPath();
+    vctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) vctx.lineTo(pts[i][0], pts[i][1]);
+    vctx.closePath();
+    if (fill) { vctx.fillStyle = fill; vctx.fill(); }
+    if (stroke) { vctx.strokeStyle = stroke; vctx.lineWidth = 1; vctx.stroke(); }
+  }
+
+  // point on the +Z or -Z face in device coords: u across X, v across Y, both in [-1,1],
+  // lifted slightly off the surface so decoration draws over the face fill
+  function facePt(nrm, u, v, lift) {
+    return [u * HX, v * HY, nrm[2] * HZ * (1 + (lift || 0))];
+  }
+
+  function arrow(from, to, col, label, cam) {
+    const a = project(from, cam), b = project(to, cam);
+    if (!a || !b) return;
+    vctx.strokeStyle = col; vctx.lineWidth = 2;
+    vctx.beginPath(); vctx.moveTo(a[0], a[1]); vctx.lineTo(b[0], b[1]); vctx.stroke();
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L, s = 8;
+    vctx.fillStyle = col;
+    vctx.beginPath();
+    vctx.moveTo(b[0], b[1]);
+    vctx.lineTo(b[0] - s*ux + s*0.45*uy, b[1] - s*uy - s*0.45*ux);
+    vctx.lineTo(b[0] - s*ux - s*0.45*uy, b[1] - s*uy + s*0.45*ux);
+    vctx.closePath(); vctx.fill();
+    if (label) {
+      vctx.font = "bold 12px ui-monospace, monospace";
+      vctx.textAlign = "center"; vctx.textBaseline = "middle";
+      vctx.fillText(label, b[0] + ux * 11, b[1] + uy * 11);
+    }
+  }
+
+  function drawScene() {
+    vctx.clearRect(0, 0, VW, VH);
+    if (!D.n) return;
+    const cam = makeCam();
+    const R = displayR(S.t);
+    const toWorld = p => matApply(R, p);
+
+    // world axes: faint, drawn behind the phone
+    const AX = 2.6;
+    const worldAxes = [[[1,0,0], "#8e4b45"], [[0,1,0], "#4a7f5e"], [[0,0,1], "#4a6a86"]];
+    vctx.lineWidth = 1;
+    for (const [d, col] of worldAxes) {
+      const a = project([-d[0]*AX, -d[1]*AX, -d[2]*AX], cam);
+      const b = project([d[0]*AX, d[1]*AX, d[2]*AX], cam);
+      if (!a || !b) continue;
+      vctx.strokeStyle = col; vctx.globalAlpha = .55;
+      vctx.setLineDash([4, 5]);
+      vctx.beginPath(); vctx.moveTo(a[0], a[1]); vctx.lineTo(b[0], b[1]); vctx.stroke();
+      vctx.setLineDash([]); vctx.globalAlpha = 1;
+    }
+
+    // body: back-face cull, which is exact for a convex box, so no depth sort is needed
+    const light = [0.42, 0.76, 0.50];
+    for (const face of FACES) {
+      const nw = toWorld(face.n);
+      const cw = toWorld([face.n[0]*HX, face.n[1]*HY, face.n[2]*HZ]);
+      const vx = cw[0] - cam.pos[0], vy = cw[1] - cam.pos[1], vz = cw[2] - cam.pos[2];
+      if (nw[0]*vx + nw[1]*vy + nw[2]*vz >= 0) continue;
+      const pts = face.idx.map(i => project(toWorld(VERTS[i]), cam));
+      if (pts.some(p => !p)) continue;
+      const lam = Math.max(0, nw[0]*light[0] + nw[1]*light[1] + nw[2]*light[2]);
+      poly(pts, shade(face.col, 0.45 + 0.55 * lam), "#0d1116");
+
+      if (face.n[2] === 1) {
+        const inset = [[-.88,-.90],[.88,-.90],[.88,.90],[-.88,.90]]
+          .map(([u,v]) => project(toWorld(facePt(face.n, u, v, 0.02)), cam));
+        if (!inset.some(p => !p)) poly(inset, "#0b1015", null);
+        const notch = [[-.17,.80],[.17,.80],[.17,.955],[-.17,.955]]
+          .map(([u,v]) => project(toWorld(facePt(face.n, u, v, 0.04)), cam));
+        if (!notch.some(p => !p)) poly(notch, "#20262c", null);
+        const c = project(toWorld(facePt(face.n, 0, -0.2, 0.04)), cam);
+        if (c) {
+          vctx.fillStyle = "#6d7b88";
+          vctx.font = "bold 11px ui-monospace, monospace";
+          vctx.textAlign = "center"; vctx.textBaseline = "middle";
+          vctx.fillText("SCREEN", c[0], c[1]);
+          vctx.fillText("+Z", c[0], c[1] + 14);
+        }
+      } else if (face.n[2] === -1) {
+        // camera bump near the top-left of the back, as seen from behind
+        const ring = [];
+        for (let k = 0; k < 18; k++) {
+          const a = k / 18 * Math.PI * 2;
+          const p = project(toWorld(facePt(face.n, -0.55 + 0.30 * Math.cos(a), 0.74 + 0.14 * Math.sin(a), 0.05)), cam);
+          if (!p) { ring.length = 0; break; }
+          ring.push(p);
+        }
+        if (ring.length) poly(ring, "#3b444c", "#20262c");
+        const c = project(toWorld(facePt(face.n, 0, -0.1, 0.05)), cam);
+        if (c) {
+          vctx.fillStyle = "#4a555f";
+          vctx.font = "bold 11px ui-monospace, monospace";
+          vctx.textAlign = "center"; vctx.textBaseline = "middle";
+          vctx.fillText("BACK", c[0], c[1]);
+          vctx.fillText("−Z", c[0], c[1] + 14);
+        }
+      } else {
+        const c = project(toWorld([face.n[0]*HX*1.02, face.n[1]*HY*1.02, face.n[2]*HZ*1.02]), cam);
+        if (c) {
+          vctx.fillStyle = lam > 0.55 ? "#10161d" : "#e8edf1";
+          vctx.font = "bold 11px ui-monospace, monospace";
+          vctx.textAlign = "center"; vctx.textBaseline = "middle";
+          vctx.fillText(face.label, c[0], c[1]);
+        }
+      }
+    }
+
+    // body-fixed triad on top of the box
+    arrow([0,0,0], toWorld([1.15, 0, 0]), "#ff6b5b", "x", cam);
+    arrow([0,0,0], toWorld([0, 1.35, 0]), "#4ce08a", "y", cam);
+    arrow([0,0,0], toWorld([0, 0, 0.95]), "#6fc0ff", "z", cam);
+
+    drawGizmo(cam);
+  }
+
+  // small fixed world-frame reference in the corner
+  function drawGizmo(cam) {
+    const ox = 46, oy = VH - 46, len = 26;
+    const axes = [[[1,0,0], "#e74c3c", "X"], [[0,1,0], "#2ecc71", "Y"], [[0,0,1], "#5dade2", "Z"]];
+    vctx.font = "bold 10px ui-monospace, monospace";
+    vctx.textAlign = "center"; vctx.textBaseline = "middle";
+    for (const [d, col, lab] of axes) {
+      const x = d[0]*cam.r[0] + d[1]*cam.r[1] + d[2]*cam.r[2];
+      const y = d[0]*cam.u[0] + d[1]*cam.u[1] + d[2]*cam.u[2];
+      const ex = ox + x * len, ey = oy - y * len;
+      vctx.strokeStyle = col; vctx.lineWidth = 1.5;
+      vctx.beginPath(); vctx.moveTo(ox, oy); vctx.lineTo(ex, ey); vctx.stroke();
+      vctx.fillStyle = col;
+      vctx.fillText(lab, ox + x * (len + 8), oy - y * (len + 8));
+    }
+    vctx.fillStyle = "#7e8b98";
+    vctx.textAlign = "left";
+    vctx.fillText("world", 12, VH - 12);
+  }
+
+  /* --- camera interaction --- */
+  let drag = null;
+  view.addEventListener("pointerdown", e => {
+    drag = { x: e.clientX, y: e.clientY }; view.setPointerCapture(e.pointerId);
+  });
+  view.addEventListener("pointermove", e => {
+    if (!drag) return;
+    S.az -= (e.clientX - drag.x) * 0.4;
+    S.el = Math.max(-88, Math.min(88, S.el + (e.clientY - drag.y) * 0.35));
+    drag.x = e.clientX; drag.y = e.clientY;
+  });
+  view.addEventListener("pointerup", () => { drag = null; });
+  view.addEventListener("wheel", e => {
+    e.preventDefault();
+    S.dist = Math.max(1.4, Math.min(20, S.dist * Math.exp(e.deltaY * 0.0012)));
+  }, { passive: false });
+
+  for (const b of document.querySelectorAll("[data-cam]")) {
+    b.addEventListener("click", () => {
+      const v = b.dataset.cam;
+      if (v === "pz") { S.az = 0; S.el = 0; }
+      else if (v === "nz") { S.az = 180; S.el = 0; }
+      else if (v === "px") { S.az = 90; S.el = 0; }
+      else if (v === "py") { S.az = 0; S.el = 88; }
+      else { S.az = 28; S.el = 16; S.dist = 4.4; }
+    });
+  }
+
+  /* --- transforms --- */
+  const areas = { W: $("matW"), B: $("matB") };
+  function readMat(key) {
+    const m = parseMat(areas[key].value);
+    areas[key].classList.toggle("bad", !m);
+    if (m) S[key] = m;
+  }
+  function writeMat(key, m) { S[key] = m; areas[key].value = fmtMat(m); areas[key].classList.remove("bad"); }
+  areas.W.addEventListener("input", () => readMat("W"));
+  areas.B.addEventListener("input", () => readMat("B"));
+
+  for (const b of document.querySelectorAll("[data-mat]")) {
+    b.addEventListener("click", () => {
+      const key = b.dataset.mat, op = b.dataset.op;
+      if (op === "I") return writeMat(key, matIdent());
+      if (op === "T") return writeMat(key, matT(S[key]));
+      const r = rotAxis(op, 90);
+      // W rotates the world frame (pre-multiply); B rotates the body frame (post-multiply)
+      writeMat(key, key === "W" ? matMul(r, S.W) : matMul(S.B, r));
+    });
+  }
+
+  $("zerohere").addEventListener("click", () => {
+    if (!D.n) return;
+    // want W * R * B == I, so W = (R*B)^-1; both are rotations, so the inverse is the transpose
+    writeMat("W", matT(matMul(sampleR(S.t), S.B)));
+  });
+
+  $("transposeR").addEventListener("change", e => { S.transposeR = e.target.checked; });
+
+  for (const c of document.querySelectorAll(".series")) {
+    c.addEventListener("change", () => { S.series[c.value] = c.checked; buildStrip(); });
+  }
+
+  /* --- transport --- */
+  function setPlaying(p) {
+    S.playing = p && D.n > 0;
+    playBtn.textContent = S.playing ? "pause" : "play";
+    playBtn.classList.toggle("on", S.playing);
+    invalidate();
+  }
+  playBtn.addEventListener("click", () => setPlaying(!S.playing));
+  $("tostart").addEventListener("click", () => { S.t = D.t0; });
+  $("stepb").addEventListener("click", () => stepFrame(-1));
+  $("stepf").addEventListener("click", () => stepFrame(1));
+  $("speed").addEventListener("change", e => { S.speed = parseFloat(e.target.value); });
+  $("loop").addEventListener("change", e => { S.loop = e.target.checked; });
+  let scrubbing = false;
+  scrub.addEventListener("pointerdown", () => { scrubbing = true; });
+  window.addEventListener("pointerup", () => { scrubbing = false; });
+  scrub.addEventListener("input", () => {
+    if (!D.n) return;
+    S.t = D.t0 + (scrub.value / 10000) * (D.t1 - D.t0);
+  });
+
+  function stepFrame(dir) {
+    if (!D.n) return;
+    setPlaying(false);
+    const i = locate(S.t);
+    // stepping back from mid-interval lands on the interval start, not the one before it
+    const j = dir > 0 ? i + 1 : (S.t > D.times[i] + 1e-12 ? i : i - 1);
+    S.t = D.times[Math.max(0, Math.min(D.n - 1, j))];
+  }
+
+  window.addEventListener("keydown", e => {
+    if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (e.code === "Space") { e.preventDefault(); setPlaying(!S.playing); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); e.shiftKey ? (setPlaying(false), S.t = Math.max(D.t0, S.t - 0.5)) : stepFrame(-1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); e.shiftKey ? (setPlaying(false), S.t = Math.min(D.t1, S.t + 0.5)) : stepFrame(1); }
+    else if (e.key === "Home") { e.preventDefault(); S.t = D.t0; }
+  });
+
+  /* --- readouts --- */
+  function fmt3(v) { return v.map(x => (x >= 0 ? " " : "") + x.toFixed(4)).join(" "); }
+  function updateReadout() {
+    if (!D.n) return;
+    const i = locate(S.t);
+    const aa = axisAngle(displayR(S.t));
+    $("r-t").textContent = S.t.toFixed(3) + " / " + D.t1.toFixed(2) + " s  [" + i + "]";
+    $("r-w").textContent = D.omega[i].toFixed(4) + " rad/s";
+    $("r-ang").textContent = (aa.ang * 180 / Math.PI).toFixed(2) + "°";
+    $("r-axis").textContent = fmt3(aa.axis);
+    $("r-det").textContent = D.det[i].toFixed(9);
+    const oe = D.orth[i];
+    $("r-orth").textContent = oe.toExponential(3);
+    $("r-orth").className = "num" + (oe > 1e-3 ? " err" : "");
+    $("clock").textContent = S.t.toFixed(2) + "s / " + D.t1.toFixed(2) + "s  ×" + S.speed;
+    if (!scrubbing)
+      scrub.value = Math.round(10000 * (S.t - D.t0) / Math.max(1e-9, D.t1 - D.t0));
+  }
+
+  /* --- main loop -----------------------------------------------------------
+     Demand driven: advance against the wall clock while playing, otherwise draw
+     once per invalidation and let the loop stop, so a paused viewer costs nothing. */
+  let rafId = null, last = 0, idle = true, needsDraw = true;
+
+  function ensureLoop() { if (rafId === null) rafId = requestAnimationFrame(frame); }
+  function invalidate() { needsDraw = true; ensureLoop(); }
+
+  function frame(now) {
+    rafId = null;
+    const dt = idle ? 0 : Math.min(0.25, (now - last) / 1000);
+    last = now; idle = false;
+    if (S.playing && D.n) {
+      S.t += dt * S.speed;
+      if (S.t >= D.t1) {
+        if (S.loop) S.t = D.t0 + (S.t - D.t1) % Math.max(1e-9, D.t1 - D.t0);
+        else { S.t = D.t1; setPlaying(false); }
+      }
+      needsDraw = true;
+    }
+    if (needsDraw) { drawScene(); drawChart(); updateReadout(); needsDraw = false; }
+    if (S.playing) ensureLoop(); else idle = true;
+  }
+
+  // catch-all repaint triggers; an extra frame from a stray click is harmless
+  for (const ev of ["input", "change", "click", "keydown"])
+    document.addEventListener(ev, invalidate, true);
+  for (const ev of ["pointerdown", "pointermove", "pointerup", "wheel"]) {
+    view.addEventListener(ev, invalidate);
+    chart.addEventListener(ev, invalidate);
+    scrub.addEventListener(ev, invalidate);
+  }
+
+  resize();
+  invalidate();
+}
+
+if (typeof window !== "undefined" && typeof document !== "undefined")
+  window.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
