@@ -130,7 +130,7 @@ def do_gyr_integrate():
                   [cos_2 * axis[2] * axis[0] - sin_ * axis[1], cos_2 * axis[2] * axis[1] + sin_ * axis[0], cos_2 * axis[2]**2 + cos_]]);
         rot_prev_to_orig = np.array(output[i - 1][3]);
         rot_cur_to_orig = np.matmul(rot_prev_to_orig, rot_cur_to_prev).tolist();
-        output.append([time, norm, data['gyr'][0][2:], rot_cur_to_orig]);
+        output.append([time, norm, data['gyr'][i][2:], rot_cur_to_orig]);
     return output;
 def rotmat_to_axis_angle(R):
     theta = math.acos((sum(R[i][i] for i in range(3)) - 1) / 2)
