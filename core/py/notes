@@ -240,3 +240,55 @@ and the norms are [0.9999999999999795, 0.9999999999999758, 0.9999999999999676]
 so also looks good
 
 next: need to try some that include significant rotation; verify above failed test's conversion to rotation matrix
+
+-------------------------------------------------------------------------------------
+
+first 10 seconds:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 
+    max acc: 97.167145
+    max diff acc: 59.107504
+    max acc(45): 21.69860761111111
+    max diff acc(45): 17.424401549555554
+    for acc:
+    mean: [0.06439883396106222, 0.20122495078799998, 9.769079760555556]
+    sigma: [0.04773932871253141, 0.020269817843414837, 0.06962095928191385]
+    for acc{45}:
+    mean: [0.06439883396106222, 0.201224950788, 9.769079760555556]
+    sigma: [0.0079010559480156, 0.0033267813617738214, 0.009875585621312058]
+
+    [nibawr@amaranth ~]$ cat | python
+    vec = [0.006439, 0.20122, 9.769079]
+    norm = sum(vec[i]**2 for i in range(3)) ** 0.5
+    import math
+    angle = math.acos(vec[2] / norm)
+    print(norm)
+    print(angle)
+    9.771153230676612
+    0.02060526932105384
+so the phone appears to have been ~1.2 degrees away from perpendicular to gravity. at a distance of ~1200 m this
+rotation of the coordinate system would cause the far point to be rotated down by ~25 m. appears that the curvature of
+the earth is not relevant at this scale:
+    [148 nibawr@amaranth ~]$ cat | python
+    import math
+    R_e = 6370e3
+    diff_theta = 1200 / R_e
+    print(math.cos(diff_theta))
+    print(R_e - math.cos(diff_theta) * R_e)
+    0.9999999822559141
+    0.11302982736378908
+doing the gyroscope integration at full 450 Hz took ~5 seconds; the final point is 362.844520 sec. the final rotation
+matrix appears to be totally wrong; converting to axis-angle format it is (2.717, [-0.824278, -0.262232, -0.501789])
+
+trying it on 20260828_125309 (bike back from campus) the final rotation is (2.020259, [0.135924, -0.679712, 0.720774])
+
+trying it on 20260828_182912 (~3 min sitting still on the floor) the final rotation is (0.001322, [0.342870, 0.888616,
+0.304630])
+
+so seems like the noise should be fine?
+
+on a ~10 second single full rotation we end at (0.019, [-0.318302, 0.238471, 0.917505]) (1.09 deg). seems fine.
+
+on a ~30 second many rotations in both directions we end at (0.677, [0.240066, -0.955894, 0.16922]) (38.8 deg). not
+fine. error mostly around y-axis which did not undergo any rotation.
+
+on a simulation of putting the phone in backpack pocket we end at (1.371, [0.586907, 0.567796, 0.57719] (78.5 deg)

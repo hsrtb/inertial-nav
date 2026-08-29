@@ -6,7 +6,7 @@ import numpy as np;
 f = open(sys.argv[1], 'r');
 
 assert(f.readline() == '# nav-recorder v1\n');
-assert(f.readline() == '# device=Google Pixel 6 Pro android=16 sdk=36\n');
+#assert(f.readline() == '# device=Google Pixel 6 Pro android=16 sdk=36\n');
 
 data = dict();
 for line in f:
@@ -66,8 +66,8 @@ def stats(data_, offset, limit):
     mean = [sum(data_[i][offset + j] for i in range(limit)) / limit for j in range(3)]
     sum_squared_residuals = [sum((data_[i][offset + j] - mean[j]) ** 2 for i in range(limit)) for j in range(3)]
     sigma = [math.sqrt(sum_squared_residuals[i] / (limit - 1)) for i in range(3)]
-    #print("mean: {}".format(mean));
-    #print("sigma: {}".format(sigma));
+    print("mean: {}".format(mean));
+    print("sigma: {}".format(sigma));
     return mean;
 
 # TODO: test for consistency of reporting interval to see if should weight the average by the dt's
@@ -92,14 +92,15 @@ def findmaxdiff_2(vectors):
     return m;
 
 #clean = denoise('acc', 45);
-#print("max acc: {}".format(findmax_2(clean)));
-#print("max diff acc: {}".format(findmaxdiff_2(clean)));
-#print("for lac:");
-#lac = stats(data['lac'], 2, 75*19);
+#print("max acc: {}".format(findmax('acc')));
+#print("max diff acc: {}".format(findmaxdiff('acc')));
+#print("max acc(45): {}".format(findmax_2(clean)));
+#print("max diff acc(45): {}".format(findmaxdiff_2(clean)));
 #print("for acc:");
-#acc = stats(data['acc'], 2, 450*19);
+#acc = stats(data['acc'], 2, 450*10);
 #print("for acc{45}:");
-#stats(denoise('acc', 45), 0);
+#stats(clean, 0, 10*10);
+
 # the docs state acc = grav + lac -> grav = acc - lac
 #grav = [acc[i] - lac[i] for i in range(3)];
 #print("implied gravity is: {}\nwith magnitude: {}".format(grav, math.sqrt(sum(grav[i]**2 for i in range(3)))));
@@ -131,5 +132,16 @@ def do_gyr_integrate():
         rot_cur_to_orig = np.matmul(rot_prev_to_orig, rot_cur_to_prev).tolist();
         output.append([time, norm, data['gyr'][0][2:], rot_cur_to_orig]);
     return output;
+def rotmat_to_axis_angle(R):
+    theta = math.acos((sum(R[i][i] for i in range(3)) - 1) / 2)
+    omega = [R[2][1] - R[1][2], R[0][2] - R[2][0], R[1][0] - R[0][1]];
+    factor = 1 / (2 * math.sin(theta))
+    omega = [factor * omega[i] for i in range(3)]
+    return (theta, omega)
+def rnd(x):
+    return (round(x[0], 3), [round(x[1][i], 6) for i in range(3)])
 
-print(json.dumps(do_gyr_integrate()));
+gyr_integrate = do_gyr_integrate();
+print(json.dumps(gyr_integrate));
+print("rotation at point 1000: {}".format(rnd(rotmat_to_axis_angle(gyr_integrate[1000][3]))), file=sys.stderr);
+print("rotation at final point ({}): {}".format(len(gyr_integrate) - 1, rnd(rotmat_to_axis_angle(gyr_integrate[-1][3]))), file=sys.stderr);
