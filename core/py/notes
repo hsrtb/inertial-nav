@@ -583,3 +583,49 @@ distinguishable from perfect under real-world use.
 i wonder if perhaps the accelerometer's response to gravity is not fully consistent. should check arbitrary n-second
 blocks in rec_20260828_182912 and see if they are meaningfully different. the android api documentation has a code
 snippet using a low-pass filter to isolate gravity.
+
+---------------------------------------------------------------------------------------------------
+
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 10 > pno.json
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.039713, 0.196287, 9.769687]
+    sigma: [0.041706, 0.018639, 0.068493]
+    t: [0.952211, 10.530777, 142.636922]
+    magnitude 9.7717 at angle 0.020 rad / 1.2 deg
+    rotation at final point (163656): (0.028, [0.388055, 0.326466, -0.861878])
+    final point: [362.8445204460295, 0.08368533374662795, [-0.0010690142, -0.083383106, -0.0070249503], [[0.9996698653570357, 0.024076506759783223, 0.008971182711205125], [-0.02397802992482301, 0.9996527617113012, -0.01092749211279109], [-0.009231163410785512, 0.010708773281600846, 0.9999000489033151]], [-0.26206669291779566, -0.18079430009614456, 0.45623529750362835], [-3.1400722779077177, -16.035233624407248, 1.8453277508448087], [1106.132614341289, -3646.0468053762515, 248.84272935219678]]
+    for lac
+    mean: [0.0, -0.0, 0.0]
+    sigma: [0.041706, 0.018639, 0.068493]
+    t: [0.0, -0.0, 0.0]
+
+from google earth, ground truth displacement is 0.85 km west, 0.38 km south, ~4m elevation change, which would be [850,
+380, -4] = 931 m. calculated result is [1106, -3646, 249] = 3818 m. notable that the final velocity is 16.4 m / s when
+it should be zero.
+
+bike ride gpx recording starts 142 sec after this file, from what should be ~20 m away (according to google earth). at
+142.115 sec we have position calculated as [418, 3.77, 7.39].
+
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_125309.csv 13 > school.json
+    difference in number of points is 0
+    Traceback (most recent call last):
+      File "/home/nibawr/code/apps/nav/core/py/./scratch", line 140, in <module>
+        acc_origs = do_coordinate_transform(gyr_solution);
+      File "/home/nibawr/code/apps/nav/core/py/./scratch", line 73, in do_coordinate_transform
+        raise Exception("on i = {} diff is {} acc timestamp {} != gyr timestamp {}".format(i, diff, data['acc'][i][0], data['gyr'][i][0]));
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Exception: on i = 347474 diff is -8605 acc timestamp 3699317978603290 != gyr timestamp 3699317978611895
+the next block of observations is fine so going to ignore this 8 us mismatch
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_125309.csv 13 > school.json
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.31598, 0.698017, 9.75134]
+    sigma: [0.058781, 0.036578, 0.095517]
+    t: [5.37556, 19.082886, 102.090523]
+    magnitude 9.7814 at angle 0.078 rad / 4.5 deg
+    rotation at final point (359952): (0.155, [-0.344615, 0.443586, 0.827328])
+    final point: [798.1465651239268, 0.29396078005311477, [-0.02321288, -0.28893927, 0.04886922], [[0.9894112801549622, -0.12970387407811526, 0.06513235563986582], [0.1260302794961375, 0.9903486163731717, 0.05767136809352321], [-0.07198393815421601, -0.04885205314817182, 0.9962087078273512]], [0.5690955479086988, 0.439259625174405, 0.5823540786110861], [128.17962473332517, 243.97908142059083, -34.53985913744468], [36762.433165559836, 68902.23118781563, -10120.319003881157]]
+
+from google earth, the displacement should be 3340 m. here we have 76 km. much worse as expected given it is a longer
+track.
