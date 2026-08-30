@@ -569,4 +569,17 @@ what happens if we use a shorter calibration period?
     mean: [-6.674830441452981e-19, -1.4109084271278031e-18, 1.0675904604795505e-15]
     sigma: [0.009422752919415195, 0.010126763628834953, 0.011444148817421083]
     t: [-7.083737097361183e-17, -1.393247121035176e-16, 9.328701308518373e-14]
-clearly much worse.
+
+clearly much worse. in still.json (216 calibration) the computed positions are:
+20.031287 sec: [-0.1728, -1.6061, -0.5360] = 1.7019 m = 0.0849 m / s
+93.116040 sec: [0.08543, -22.132, -4.8844] = 22.664 m = 0.2434 m / s
+in still20.json (20-sec calibration) the overall drift rate is 138.3614 / 216.336 = 0.639 m / s. at 20.000248 sec the
+computed position is [-0.042, -0.232, -0.0329] = 0.238 m = 0.0119 m / s drift
+
+so current status is that it appears (n=1) to ~work while moving, but it clearly significantly drifts while standing
+still, with the drift being significantly worse on longer periods; gyro is not perfect but has not been shown to be
+distinguishable from perfect under real-world use.
+
+i wonder if perhaps the accelerometer's response to gravity is not fully consistent. should check arbitrary n-second
+blocks in rec_20260828_182912 and see if they are meaningfully different. the android api documentation has a code
+snippet using a low-pass filter to isolate gravity.
