@@ -101,9 +101,9 @@ def rnd(x):
     return (round(x[0], 3), [round(x[1][i], 6) for i in range(3)])
 
 def dump_stats(mean, sigma):
-    print("mean: {}".format(mean), file=sys.stderr);
-    print("sigma: {}".format(sigma), file=sys.stderr);
-    t = [mean[i] / sigma[i] for i in range(3)];
+    print("mean: {}".format([round(a, 6) for a in mean]), file=sys.stderr);
+    print("sigma: {}".format([round(a, 6) for a in sigma]), file=sys.stderr);
+    t = [round(mean[i] / sigma[i], 6) for i in range(3)];
     print("t: {}".format(t), file=sys.stderr);
 
 # MAIN -------------------------------------------------------------------------------------------
@@ -152,9 +152,9 @@ print("rotation at final point ({}): {}".format(len(solution) - 1, rnd(rotmat_to
 print("final point: {}".format(solution[-1]), file=sys.stderr);
 
 
-lac_mean, lac_sigma = stats([a[4] for a in solution], 0, calib_n);
-print('for lac', file=sys.stderr);
-dump_stats(lac_mean, lac_sigma);
+#lac_mean, lac_sigma = stats([a[4] for a in solution], 0, calib_n);
+#print('for lac', file=sys.stderr);
+#dump_stats(lac_mean, lac_sigma);
 
 
 ## calibrating without gyro transform
