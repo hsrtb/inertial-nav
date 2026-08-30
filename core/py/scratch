@@ -23,22 +23,6 @@ def findmatch():
 def trapezoid(first, second):
     return [0.5 * (first[1][i] + second[1][i]) * (second[0] - first[0]) for i in range(3)]
 
-def do_integrate(grav):
-    # [time, [lac], [v], [x]]
-    limit = len(data['acc']);
-    output = list();
-    time_start = data['acc'][0][0] / 1e9;
-    output.append([0, [data['acc'][0][2:][j] - grav[j] for j in range(3)], [0,0,0], [0,0,0]]);
-    for i in range(1, limit):
-        time = data['acc'][i][0] / 1e9 - time_start;
-        lac = [data['acc'][i][2:][j] - grav[j] for j in range(3)];
-        delta_v = trapezoid([output[i-1][0], output[i-1][1]], [time, lac]);
-        v = [output[i-1][2][j] + delta_v[j] for j in range(3)];
-        delta_x = trapezoid([output[i-1][0], output[i-1][2]], [time, v]);
-        x = [output[i-1][3][j] + delta_x[j] for j in range(3)];
-        output.append([time, lac, v, x]);
-    return output;
-
 def stats(data_, offset, limit):
     mean = [sum(data_[i][offset + j] for i in range(limit)) / limit for j in range(3)]
     sum_squared_residuals = [sum((data_[i][offset + j] - mean[j]) ** 2 for i in range(limit)) for j in range(3)]
@@ -51,42 +35,11 @@ def omega(gyr):
 def do_gyr_integrate():
     # [time, omega, [gyr], [rotmat]]
     # rotmat rotates a vector in that timepoint's device coordinates into the initial timepoint's device coordinates
-    limit = len(data['gyr']);
+    limit = min(len(data['acc']), len(data['gyr']));
     output = list();
     time_start = data['gyr'][0][0] / 1e9;
     output.append([0, omega(data['gyr'][0][2:]), data['gyr'][0][2:], [[1, 0, 0], [0, 1, 0], [0, 0, 1]]]);
     for i in range(1, limit):
-        cur = [data['gyr'][i][0] / 1e9 - time_start, data['gyr'][i][2:]];
-        prev = [data['gyr'][i - 1][0] / 1e9 - time_start, data['gyr'][i - 1][2:]];
-        rot_vec = trapezoid(prev, cur);
-        theta = omega(rot_vec);
-        axis = [a / theta for a in rot_vec];
-        cos_ = math.cos(theta);
-        cos_2 = 1 - cos_;
-        sin_ = math.sin(theta);
-        rot_cur_to_prev = np.array([[cos_2 * axis[0]**2 + cos_, cos_2 * axis[0] * axis[1] - sin_ * axis[2], cos_2 * axis[0] * axis[2] + sin_ * axis[1]],
-                  [cos_2 * axis[1] * axis[0] + sin_ * axis[2], cos_2 * axis[1]**2 + cos_, cos_2 * axis[1] * axis[2] - sin_ * axis[0]],
-                  [cos_2 * axis[2] * axis[0] - sin_ * axis[1], cos_2 * axis[2] * axis[1] + sin_ * axis[0], cos_2 * axis[2]**2 + cos_]]);
-        rot_prev_to_orig = np.array(output[i - 1][3]);
-        rot_cur_to_orig = np.matmul(rot_prev_to_orig, rot_cur_to_prev).tolist();
-        # putting in omega for consistency with previous right-rule outputs. I don't think it really matters/is useful;
-        # I don't think I've looked at it at all.
-        output.append([cur[0], omega(data['gyr'][i][2:]), data['gyr'][i][2:], rot_cur_to_orig]);
-    return output;
-
-def do_combined_integrate(grav):
-    # [time, omega, [omega], [rotmat], [lac], [v], [x]]
-    limit = min(len(data['acc']), len(data['gyr']));
-    output = list();
-    time_start = data['acc'][0][0] / 1e9;
-    dbg_out = list();
-    # findmatch() guarantees the first points have matching timestamps
-    output.append([0, omega(data['gyr'][0][2:]), data['gyr'][0][2:], [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-                   [data['acc'][0][2:][j] - grav[j] for j in range(3)], [0,0,0], [0,0,0]]);
-    dbg_out.append(data['acc'][0][2:]);
-    for i in range(1, limit):
-        if (diff := data['acc'][i][0] - data['gyr'][i][0]) != 0:
-            raise Exception("on i = {} diff is {} acc timestamp {} != gyr timestamp {}".format(i, diff, data['acc'][i][0], data['gyr'][i][0]));
         cur = [data['gyr'][i][0] / 1e9 - time_start, data['gyr'][i][2:]];
         prev = [data['gyr'][i - 1][0] / 1e9 - time_start, data['gyr'][i - 1][2:]];
         rot_vec = trapezoid(prev, cur);
@@ -107,16 +60,36 @@ def do_combined_integrate(grav):
                       [cos_2 * axis[1] * axis[0] + sin_ * axis[2], cos_2 * axis[1]**2 + cos_, cos_2 * axis[1] * axis[2] - sin_ * axis[0]],
                       [cos_2 * axis[2] * axis[0] - sin_ * axis[1], cos_2 * axis[2] * axis[1] + sin_ * axis[0], cos_2 * axis[2]**2 + cos_]]);
         rot_prev_to_orig = np.array(output[i - 1][3]);
-        rot_cur_to_orig = np.matmul(rot_prev_to_orig, rot_cur_to_prev);
-        acc_orig = np.matmul(rot_cur_to_orig, np.array(data['acc'][i][2:])).tolist();
-        dbg_out.append(acc_orig);
-        lac = [acc_orig[j] - grav[j] for j in range(3)];
-        delta_v = trapezoid([output[i - 1][0], output[i - 1][4]], [cur[0], lac]);
+        rot_cur_to_orig = np.matmul(rot_prev_to_orig, rot_cur_to_prev).tolist();
+        # putting in omega for consistency with previous right-rule outputs. I don't think it really matters/is useful;
+        # I don't think I've looked at it at all.
+        output.append([cur[0], omega(data['gyr'][i][2:]), data['gyr'][i][2:], rot_cur_to_orig]);
+    return output;
+
+def do_coordinate_transform(gyr_solution):
+    output = list();
+    for i in range(0, len(gyr_solution)):
+        if (diff := data['acc'][i][0] - data['gyr'][i][0]) != 0:
+            raise Exception("on i = {} diff is {} acc timestamp {} != gyr timestamp {}".format(i, diff, data['acc'][i][0], data['gyr'][i][0]));
+        acc_orig = np.matmul(np.array(gyr_solution[i][3]), np.array(data['acc'][i][2:])).tolist();
+        output.append(acc_orig);
+    return output;
+
+def do_final_integrate(gyr_solution, acc_origs, grav):
+    # [time, omega, [omega], [rotmat], [lac], [v], [x]]
+    limit = min(len(data['acc']), len(data['gyr']));
+    output = list();
+    time_start = data['acc'][0][0] / 1e9;
+    output.append([gyr_solution[0][0], gyr_solution[0][1], gyr_solution[0][2], gyr_solution[0][3], [acc_origs[0][j] - grav[j] for j in range(3)], [0,0,0], [0,0,0]]);
+    for i in range(1, limit):
+        time = data['acc'][i][0] / 1e9 - time_start;
+        lac = [acc_origs[i][j] - grav[j] for j in range(3)];
+        delta_v = trapezoid([output[i - 1][0], output[i - 1][4]], [time, lac]);
         v = [output[i - 1][5][j] + delta_v[j] for j in range(3)];
-        delta_x = trapezoid([output[i - 1][0], output[i - 1][5]], [cur[0], v]);
+        delta_x = trapezoid([output[i - 1][0], output[i - 1][5]], [time, v]);
         x = [output[i - 1][6][j] + delta_x[j] for j in range(3)];
-        output.append([cur[0], omega(data['gyr'][i][2:]), data['gyr'][i][2:], rot_cur_to_orig.tolist(), lac, v, x]);
-    return (output, dbg_out);
+        output.append([gyr_solution[i][0], gyr_solution[i][1], gyr_solution[i][2], gyr_solution[i][3], lac, v, x]);
+    return output;
 
 def rotmat_to_axis_angle(R):
     theta = math.acos((sum(R[i][i] for i in range(3)) - 1) / 2)
@@ -163,29 +136,41 @@ data['acc'] = data['acc'][findmatch():];
 assert(data['acc'][0][0] - data['gyr'][0][0] == 0);
 print('difference in number of points is {}'.format(len(data['acc']) - len(data['gyr'])), file=sys.stderr);
 
+gyr_solution = do_gyr_integrate();
+acc_origs = do_coordinate_transform(gyr_solution);
+
 calib_n = int(450 * float(sys.argv[2]));
-# calibrating without gyro transform
-mean, sigma = stats(data['acc'], 2, calib_n)
+mean, sigma = stats(acc_origs, 0, calib_n);
+print('acc_origs:', file=sys.stderr);
 dump_stats(mean, sigma);
 grav_mag = omega(mean);
 print("magnitude {:.4f} at angle {:.3f} rad / {:.1f} deg".format(grav_mag, math.acos(mean[2] / grav_mag), math.acos(mean[2] / grav_mag) * 180 / math.pi), file=sys.stderr);
 
-solution, acc_origs = do_combined_integrate(mean);
+solution = do_final_integrate(gyr_solution, acc_origs, mean);
 print(json.dumps(solution));
 print("rotation at final point ({}): {}".format(len(solution) - 1, rnd(rotmat_to_axis_angle(solution[-1][3]))), file=sys.stderr);
 print("final point: {}".format(solution[-1]), file=sys.stderr);
 
-ao_mean, ao_sigma = stats(acc_origs, 0, calib_n);
-print('for acc_origs', file=sys.stderr);
-dump_stats(ao_mean, ao_sigma);
 
 lac_mean, lac_sigma = stats([a[4] for a in solution], 0, calib_n);
 print('for lac', file=sys.stderr);
 dump_stats(lac_mean, lac_sigma);
 
-ao_ao_mean, ao_ao_sigma = stats([[acc_origs[i][j] - ao_mean[j] for j in range(3)] for i in range(len(acc_origs))], 0, calib_n);
-print('for acc_orig - mean(acc_orig)', file=sys.stderr);
-dump_stats(ao_ao_mean, ao_ao_sigma);
+
+## calibrating without gyro transform
+#mean, sigma = stats(data['acc'], 2, calib_n)
+#dump_stats(mean, sigma);
+#
+#solution, acc_origs = do_combined_integrate(mean);
+#
+#ao_mean, ao_sigma = stats(acc_origs, 0, calib_n);
+#print('for acc_origs', file=sys.stderr);
+#dump_stats(ao_mean, ao_sigma);
+#
+#
+#ao_ao_mean, ao_ao_sigma = stats([[acc_origs[i][j] - ao_mean[j] for j in range(3)] for i in range(len(acc_origs))], 0, calib_n);
+#print('for acc_orig - mean(acc_orig)', file=sys.stderr);
+#dump_stats(ao_ao_mean, ao_ao_sigma);
 
 #gyr_integrate = do_gyr_integrate();
 #print(json.dumps(gyr_integrate));
@@ -239,6 +224,64 @@ def findmaxdiff_2(vectors):
     for i in range(2, len(vectors)):
         m = max(max([abs(b - a) for a,b in zip(vectors[i-1], vectors[i])]), m);
     return m;
+def do_integrate(grav):
+    # [time, [lac], [v], [x]]
+    limit = len(data['acc']);
+    output = list();
+    time_start = data['acc'][0][0] / 1e9;
+    output.append([0, [data['acc'][0][2:][j] - grav[j] for j in range(3)], [0,0,0], [0,0,0]]);
+    for i in range(1, limit):
+        time = data['acc'][i][0] / 1e9 - time_start;
+        lac = [data['acc'][i][2:][j] - grav[j] for j in range(3)];
+        delta_v = trapezoid([output[i-1][0], output[i-1][1]], [time, lac]);
+        v = [output[i-1][2][j] + delta_v[j] for j in range(3)];
+        delta_x = trapezoid([output[i-1][0], output[i-1][2]], [time, v]);
+        x = [output[i-1][3][j] + delta_x[j] for j in range(3)];
+        output.append([time, lac, v, x]);
+    return output;
+def do_combined_integrate(grav):
+    limit = min(len(data['acc']), len(data['gyr']));
+    output = list();
+    time_start = data['acc'][0][0] / 1e9;
+    dbg_out = list();
+    # findmatch() guarantees the first points have matching timestamps
+    output.append([0, omega(data['gyr'][0][2:]), data['gyr'][0][2:], [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                   [data['acc'][0][2:][j] - grav[j] for j in range(3)], [0,0,0], [0,0,0]]);
+    dbg_out.append(data['acc'][0][2:]);
+    for i in range(1, limit):
+        if (diff := data['acc'][i][0] - data['gyr'][i][0]) != 0:
+            raise Exception("on i = {} diff is {} acc timestamp {} != gyr timestamp {}".format(i, diff, data['acc'][i][0], data['gyr'][i][0]));
+        cur = [data['gyr'][i][0] / 1e9 - time_start, data['gyr'][i][2:]];
+        prev = [data['gyr'][i - 1][0] / 1e9 - time_start, data['gyr'][i - 1][2:]];
+        rot_vec = trapezoid(prev, cur);
+        theta = omega(rot_vec);
+        if theta == 0:
+            print('!!! DIVIDE BY ZERO !!!', file=sys.stderr);
+            print('i = {}'.format(i), file=sys.stderr);
+            print('cur = {}'.format(cur), file=sys.stderr);
+            print('prev = {}'.format(prev), file=sys.stderr);
+            print('rot_vec = {}'.format(rot_vec), file=sys.stderr);
+            rot_cur_to_prev = np.eye(3);
+        else:
+            axis = [a / theta for a in rot_vec];
+            cos_ = math.cos(theta);
+            cos_2 = 1 - cos_;
+            sin_ = math.sin(theta);
+            rot_cur_to_prev = np.array([[cos_2 * axis[0]**2 + cos_, cos_2 * axis[0] * axis[1] - sin_ * axis[2], cos_2 * axis[0] * axis[2] + sin_ * axis[1]],
+                      [cos_2 * axis[1] * axis[0] + sin_ * axis[2], cos_2 * axis[1]**2 + cos_, cos_2 * axis[1] * axis[2] - sin_ * axis[0]],
+                      [cos_2 * axis[2] * axis[0] - sin_ * axis[1], cos_2 * axis[2] * axis[1] + sin_ * axis[0], cos_2 * axis[2]**2 + cos_]]);
+        rot_prev_to_orig = np.array(output[i - 1][3]);
+        rot_cur_to_orig = np.matmul(rot_prev_to_orig, rot_cur_to_prev);
+        acc_orig = np.matmul(rot_cur_to_orig, np.array(data['acc'][i][2:])).tolist();
+        dbg_out.append(acc_orig);
+        lac = [acc_orig[j] - grav[j] for j in range(3)];
+        delta_v = trapezoid([output[i - 1][0], output[i - 1][4]], [cur[0], lac]);
+        v = [output[i - 1][5][j] + delta_v[j] for j in range(3)];
+        delta_x = trapezoid([output[i - 1][0], output[i - 1][5]], [cur[0], v]);
+        x = [output[i - 1][6][j] + delta_x[j] for j in range(3)];
+        output.append([cur[0], omega(data['gyr'][i][2:]), data['gyr'][i][2:], rot_cur_to_orig.tolist(), lac, v, x]);
+    return (output, dbg_out);
+
 
 #clean = denoise('acc', 45);
 #print("max acc: {}".format(findmax('acc')));
