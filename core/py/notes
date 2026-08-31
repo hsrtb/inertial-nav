@@ -802,3 +802,79 @@ again initial velocity was fine so we just reproduce slide-phase displacement. K
     final point of base integration:     [26.389208313077688, 0.09995563466198831, 0.005873996407842602, 0.017928306448079034]
     final point of kalman integration:   [26.389208313077688, 0.10010349138577769, 0.005918719351715373, 0.015479505250342217]
 same result. K = 0.9979.
+
+----
+
+want to retry the very low K on longer tracks. previously it gave ~identical integration results for a track that is 20
+sec of sitting still then ~2.7 m in ~6 sec. so what about tracks that go faster?
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_125309.csv 13 > school-kalman-y.json
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.31598, 0.698017, 9.75134]
+    sigma: [0.058781, 0.036578, 0.095517]
+    t: [5.37556, 19.082886, 102.090523]
+    magnitude 9.7814 at angle 0.078 rad / 4.5 deg
+    for jerks, slide phase:
+    mean: [0.000715, 0.000363, 0.000647]
+    sigma: [73.004053, 75.673988, 143.883558]
+    t: [1e-05, 5e-06, 4e-06]
+    post-calibration base integration:   [12.969807799905539, -0.014143808982196027, -9.265194115971703e-06, 0.1465829129064139]
+    post-calibration kalman integration: [12.969807799905539, 0.0, 0.0, 0.0]
+    final point of base integration:     [798.1465651239268, 0.439259625174405, 243.9790867145329, 68902.2333037616]
+    final point of kalman integration:   [798.1465651239268, 0.44783409646813466, 243.9435658785781, 68882.70711302104]
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_125309.csv 13 > school-kalman-x.json
+    [...]
+    post-calibration base integration:   [12.969807799905539, 0.03030223434397694, -3.3731220159019385e-05, 0.055979212345641564]
+    post-calibration kalman integration: [12.969807799905539, 0.0, 0.0, 0.0]
+    final point of base integration:     [798.1465651239268, 0.5690955479086988, 128.17961245218373, 36762.433825924134]
+    final point of kalman integration:   [798.1465651239268, 0.3446439851746004, 128.1507127139174, 36751.093290324]
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_125309.csv 13 > school-kalman-z.json
+    [...]
+    post-calibration base integration:   [12.969807799905539, 0.08854210423314512, -0.0005061663734504118, -0.07281469183138321]
+    post-calibration kalman integration: [12.969807799905539, 0.0, 0.0, 0.0]
+    final point of base integration:     [798.1465651239268, 0.5823540786110861, -34.53986376637002, -10120.319404853244]
+    final point of kalman integration:   [798.1465651239268, 0.056878098913942354, -34.5422377375565, -10119.514352478842]
+
+so the results are not any different. for x-axis run K = 0.0266, y-axis K = 0.0275, z-axis K = 0.0517. trying another:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 10 > pno-kalman-z.json
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.039713, 0.196287, 9.769687]
+    sigma: [0.041706, 0.018639, 0.068493]
+    t: [0.952211, 10.530777, 142.636922]
+    magnitude 9.7717 at angle 0.020 rad / 1.2 deg
+    for jerks, slide phase:
+    mean: [-0.000961, -0.000501, 0.001612]
+    sigma: [195.75915, 117.595532, 121.35159]
+    t: [-5e-06, -4e-06, 1.3e-05]
+    post-calibration base integration:   [9.974716491007712, 0.001019692104474501, 0.0006754961103612165, 0.018987234229637107]
+    post-calibration kalman integration: [9.974716491007712, 0.0, 0.0, 0.0]
+    final point of base integration:     [362.8445204460295, 0.45623529750362835, 1.8453277508448087, 248.84272935219678]
+    final point of kalman integration:   [362.8445204460295, 0.008207957166874811, 1.8440918403202216, 248.41479228782768]
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 10 > pno-kalman-x.json
+    [...]
+    post-calibration base integration:   [9.974716491007712, 0.021955289927790188, 0.00031029987007494383, -0.07161090947388575]
+    post-calibration kalman integration: [9.974716491007712, 0.0, 0.0, 0.0]
+    final point of base integration:     [362.8445204460295, -0.26206669291779566, -3.1400722779077177, 1106.132614341289]
+    final point of kalman integration:   [362.8445204460295, -0.07742658474414502, -3.138605950414393, 1106.10773241996]
+    [148 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 10 > pno-kalman-y.json
+    [...]
+    post-calibration base integration:   [9.974716491007712, -0.008832059666662118, 8.30287764322851e-05, 0.004491368221786318]
+    post-calibration kalman integration: [9.974716491007712, 0.0, 0.0, 0.0]
+    final point of base integration:     [362.8445204460295, -0.18079430009614456, -16.035233624407248, -3646.0468053762515]
+    final point of kalman integration:   [362.8445204460295, 0.047182444511686135, -16.03769935754364, -3645.2670549685986]
+again results are ~identical. K = [0.0697, 0.0425, 0.0438]. try with even smaller K:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 10 > pno-kalman2-y.json
+    [...]
+    post-calibration base integration:   [9.974716491007712, -0.008832059666662118, 8.30287764322851e-05, 0.004491368221786318]
+    post-calibration kalman integration: [9.974716491007712, 0.0, 0.0, 0.0]
+    final point of base integration:     [362.8445204460295, -0.18079430009614456, -16.035233624407248, -3646.0468053762515]
+    final point of kalman integration:   [362.8445204460295, 0.09923302560510157, -16.085410688118625, -3637.7111103639945]
+this gives a third acceleration value but the same velocity and position. K = 0.00433. go even smaller:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 10 > pno-kalman3-y.json
+    [...]
+    post-calibration base integration:   [9.974716491007712, -0.008832059666662118, 8.30287764322851e-05, 0.004491368221786318]
+    post-calibration kalman integration: [9.974716491007712, 0.0, 0.0, 0.0]
+    final point of base integration:     [362.8445204460295, -0.18079430009614456, -16.035233624407248, -3646.0468053762515]
+    final point of kalman integration:   [362.8445204460295, 0.08514817418139879, -16.438739269186723, -3571.879850257699]
+starting to very slightly pull apart. K = 0.000475.

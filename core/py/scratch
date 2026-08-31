@@ -196,10 +196,10 @@ jerk_mean_slide, jerk_sigma_slide = stats(jerks[calib_n:], 0, len(jerks) - calib
 print('for jerks, slide phase:', file=sys.stderr);
 dump_stats(jerk_mean_slide, jerk_sigma_slide);
 
-axis = 2;
+axis = 1;
 lac_1d = [[lac[i][0], lac[i][1][axis]] for i in range(len(lac))];
 sigma2_j = [0 for i in range(calib_n)] + [jerk_sigma_slide[axis]**2 for i in range(len(lac_1d) - calib_n)];
-kalman = do_kalman_1d(lac_1d, sigma2_j, sigma[axis] ** 2, len(lac_1d));
+kalman = do_kalman_1d(lac_1d, sigma2_j, 300000, len(lac_1d));
 base_integrate = do_1d_integrate(lac_1d);
 kalman_integrate = do_1d_integrate([[gyr_solution[i][0], kalman[0][i]] for i in range(len(kalman[0]))]);
 print(json.dumps({'kalman': kalman, 'base_integrate': base_integrate, 'kalman_integrate': kalman_integrate}));
