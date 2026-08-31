@@ -201,7 +201,7 @@ dump_stats(jerk_mean_calib, jerk_sigma_calib);
 
 axis = 1;
 lac_1d = [[lac[i][0], lac[i][1][axis]] for i in range(len(lac))];
-kalman = do_kalman_1d(lac_1d, jerk_sigma_full[axis]**2, jerk_sigma_calib[axis] ** 2);
+kalman = do_kalman_1d(lac_1d, jerk_sigma_full[axis]**2, sigma[axis] ** 2);
 base_integrate = do_1d_integrate(lac_1d);
 kalman_integrate = do_1d_integrate([[gyr_solution[i][0], kalman[0][i]] for i in range(len(kalman[0]))]);
 print(json.dumps({'kalman': kalman, 'base_integrate': base_integrate, 'kalman_integrate': kalman_integrate}));

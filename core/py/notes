@@ -745,3 +745,12 @@ said (glancing at the output file the accelerations appear in kalman_integrate a
 base_integrate), but the result ended up the same (the velocities and positions are very similar). but then I realized I
 put the wrong data in - R is the variance of the measurement i.e. of the accelerometer data, but I set it to the
 variance of the jerk during the calibration period.
+
+----
+now fixed:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman3-y.json
+    [...]
+    sigma2_j / sigma2_z  = 11381117.991892
+    final point of base integration:   [26.389208313077688, 0.06645903630903374, -0.019599798234209174, 2.869311173356096]
+    final point of kalman integration: [26.389208313077688, 0.06594797450788456, -0.019578946863222004, 2.8698948186635995]
+and now K = 0.982... and the model is back to just spitting back whatever the sensor says.
