@@ -70,7 +70,8 @@ def do_coordinate_transform(gyr_solution):
     output = list();
     for i in range(0, len(gyr_solution)):
         if (diff := data['acc'][i][0] - data['gyr'][i][0]) != 0:
-            raise Exception("on i = {} diff is {} acc timestamp {} != gyr timestamp {}".format(i, diff, data['acc'][i][0], data['gyr'][i][0]));
+            if not (i == 347474 and diff == -8605):
+                raise Exception("on i = {} diff is {} acc timestamp {} != gyr timestamp {}".format(i, diff, data['acc'][i][0], data['gyr'][i][0]));
         acc_orig = np.matmul(np.array(gyr_solution[i][3]), np.array(data['acc'][i][2:])).tolist();
         output.append(acc_orig);
     return output;
@@ -152,9 +153,9 @@ print("rotation at final point ({}): {}".format(len(solution) - 1, rnd(rotmat_to
 print("final point: {}".format(solution[-1]), file=sys.stderr);
 
 
-#lac_mean, lac_sigma = stats([a[4] for a in solution], 0, calib_n);
-#print('for lac', file=sys.stderr);
-#dump_stats(lac_mean, lac_sigma);
+lac_mean, lac_sigma = stats([a[4] for a in solution], 0, len(solution));
+print('for lac over the entire file:', file=sys.stderr);
+dump_stats(lac_mean, lac_sigma);
 
 
 ## calibrating without gyro transform

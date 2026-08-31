@@ -629,3 +629,25 @@ the next block of observations is fine so going to ignore this 8 us mismatch
 
 from google earth, the displacement should be 3340 m. here we have 76 km. much worse as expected given it is a longer
 track.
+
+----------------
+
+    [1 nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > /dev/null
+    [...]
+    for lac over the entire file:
+    mean: [0.001896, -0.000741, 0.000227]
+    sigma: [0.208887, 0.319221, 0.199377]
+    t: [0.009075, -0.00232, 0.001138]
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 10 > /dev/null
+    [...]
+    for lac over the entire file:
+    mean: [-0.008656, -0.044192, 0.005084]
+    sigma: [2.059783, 1.9999, 2.541551]
+    t: [-0.004203, -0.022097, 0.002]
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_125309.csv 13 > /dev/null
+    [...]
+    for lac over the entire file:
+    mean: [0.160597, 0.305681, -0.043274]
+    sigma: [1.365217, 1.375253, 2.220914]
+    t: [0.117635, 0.222273, -0.019485]
+so maybe the assumption of zero mean process noise will actually work.
