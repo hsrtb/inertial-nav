@@ -772,3 +772,33 @@ what if i loosen it up a bit; say we expect jerks of up to 2 m / s^3? sigma2_j =
     final point of base integration:   [19.952637451700866, -0.00016455253573406659, 2.9341486808788304e-05, 0.2639046326989401]
     final point of kalman integration: [19.952637451700866, -0.0024247087477576594, -1.6760095183823844e-05, 0.26244407626649063]
 right back to full drift.
+
+what if we set Q=0 during the calibration phase, then for the slide phase set Q derived from the slide data only? i.e.
+what happens when starting the slide from accurate initial conditions?
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman5-y.json
+    [...]
+    for jerks, slide phase:
+    mean: [0.014639, 0.006102, 0.025616]
+    sigma: [31.84519, 74.78579, 146.057539]
+    t: [0.00046, 8.2e-05, 0.000175]
+    post-calibration base integration:   [19.952637451700866, -0.00016455253573406659, 2.9341486808788304e-05, 0.2639046326989401]
+    post-calibration kalman integration: [19.952637451700866, 0.0, 0.0, 0.0]
+    final point of base integration:     [26.389208313077688, 0.06645903630903374, -0.019599798234209174, 2.869311173356096]
+    final point of kalman integration:   [26.389208313077688, 0.06633086185792246, -0.01962919932529411, 2.6052202027098748]
+looks like the base integration had a fine computed velocity for the y-axis so zeroing out the calibration phase just
+gave the slide-phase displacement calculated by the base integration. (K = 0.99558). try on x-axis:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman5-x.json
+    [...]
+    post-calibration base integration:   [19.952637451700866, 0.016225836552925116, -3.3833879680192004e-05, -0.21653264996448707]
+    post-calibration kalman integration: [19.952637451700866, 0.0, 0.0, 0.0]
+    final point of base integration:     [26.389208313077688, 0.1149261394363103, 0.04989281892964964, -0.091879012260479]
+    final point of kalman integration:   [26.389208313077688, 0.11494134427428594, 0.04989867545635069, 0.124749174355323]
+again initial velocity was fine so we just reproduce slide-phase displacement. K = 0.96528. try on z-axis because it
+(mysteriously) has the most jerk:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman5-z.json
+    [...]
+    post-calibration base integration:   [19.952637451700866, 0.0017324614663554172, -4.7625337710252557e-05, 0.002741749188649111]
+    post-calibration kalman integration: [19.952637451700866, 0.0, 0.0, 0.0]
+    final point of base integration:     [26.389208313077688, 0.09995563466198831, 0.005873996407842602, 0.017928306448079034]
+    final point of kalman integration:   [26.389208313077688, 0.10010349138577769, 0.005918719351715373, 0.015479505250342217]
+same result. K = 0.9979.
