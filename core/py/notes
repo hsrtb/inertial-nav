@@ -651,3 +651,49 @@ track.
     sigma: [1.365217, 1.375253, 2.220914]
     t: [0.117635, 0.222273, -0.019485]
 so maybe the assumption of zero mean process noise will actually work.
+
+----
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman-x.json
+    difference in number of points is -1
+    acc_origs:
+    mean: [0.173092, 0.047287, 9.782081]
+    sigma: [0.013629, 0.011064, 0.014714]
+    t: [12.700258, 4.273991, 664.809563]
+    magnitude 9.7837 at angle 0.018 rad / 1.1 deg
+    final point of base integration:   [26.389208313077688, 0.1149261394363103, 0.04989281892964964, -0.091879012260479]
+    final point of kalman integration: [26.389208313077688, 0.1145574453009313, 0.04971780012824399, -0.09197896420522905]
+
+so 1) my 1d integrate reproduced the x-axis result for the 3d integrate 2) the kalman filter generated an identical
+result. though i think in this case sigma^2_a = sigma^2_z because there wasn't any physical acceleration on the x-axis.
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman-x.json
+    [...]
+    sigma2_a = 519.374354
+    sigma2_z = 1.671566
+    [...]
+... or not? but actually i think my implementation has a bug (forgot to divide by n).
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman-x.json
+    difference in number of points is -1
+    acc_origs:
+    mean: [0.173092, 0.047287, 9.782081]
+    sigma: [0.013629, 0.011064, 0.014714]
+    t: [12.700258, 4.273991, 664.809563]
+    magnitude 9.7837 at angle 0.018 rad / 1.1 deg
+    sigma2_a = 0.043634
+    sigma2_z = 0.000186
+    final point of base integration:   [26.389208313077688, 0.1149261394363103, 0.04989281892964964, -0.091879012260479]
+    final point of kalman integration: [26.389208313077688, 0.11443902502005955, 0.04966640586189986, -0.09188388374365951]
+but then they're still different. i think it makes sense that there was more random side-to-side in the slide phase. at
+point 9000 19.954 sec, base position is -0.216532 and kalman position is -0.215913. so this filter isn't working to
+smooth the noise out. try y-axis for completeness:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman-x.json
+    difference in number of points is -1
+    acc_origs:
+    mean: [0.173092, 0.047287, 9.782081]
+    sigma: [0.013629, 0.011064, 0.014714]
+    t: [12.700258, 4.273991, 664.809563]
+    magnitude 9.7837 at angle 0.018 rad / 1.1 deg
+    sigma2_a = 0.101894
+    sigma2_z = 0.000122
+    final point of base integration:   [26.389208313077688, 0.06645903630903374, -0.019599798234209174, 2.869311173356096]
+    final point of kalman integration: [26.389208313077688, 0.06637930114971062, -0.01955441273334, 2.8664457945887007]
+base point 9000 is 0.263904, kalman is 0.264024.

@@ -107,6 +107,45 @@ def dump_stats(mean, sigma):
     t = [round(mean[i] / sigma[i], 6) for i in range(3)];
     print("t: {}".format(t), file=sys.stderr);
 
+# KALMAN -----------------------------------------------------------------------------------------
+
+# lac := [lac]
+def do_kalman_1d(lac, calib_n):
+    sigma2_a = sum(a**2 for a in lac) / len(lac);
+    sigma2_z = sum(lac[i]**2 for i in range(calib_n)) / calib_n;
+    print("sigma2_a = {:.6f}\nsigma2_z = {:.6f}".format(sigma2_a, sigma2_z), file=sys.stderr);
+    F = 0;
+    G = 1;
+    Q = sigma2_a;
+    H = 1;
+    R = sigma2_z;
+    xhat = [None for i in range(len(lac))];
+    P = [None for i in range(len(lac))];
+    xhat[0] = 0;
+    P[0] = 0;
+    K = [None for i in range(len(lac))];
+    for k in range(1, len(lac)):
+        xhat_prior = F * xhat[k - 1];
+        P_prior = F * P[k - 1] * F + Q;
+        ytilde = lac[k] - H * xhat_prior;
+        S = H * P_prior * H + R;
+        K[k] = P_prior * H * (1 / S);
+        xhat[k] = xhat_prior + K[k] * ytilde;
+        P[k] = (1 - K[k] * H) * P_prior;
+    return [xhat, P, K];
+
+# lac := [time, lac]
+def do_1d_integrate(lac):
+    output = list();
+    output.append([lac[0][0], lac[0][1], 0, 0]);
+    for i in range(1, len(lac)):
+        delta_v = 0.5 * (lac[i][1] + lac[i - 1][1]) * (lac[i][0] - lac[i - 1][0]);
+        v = output[i - 1][2] + delta_v;
+        delta_x = 0.5 * (v + output[i - 1][2]) * (lac[i][0] - lac[i - 1][0]);
+        x = output[i - 1][3] + delta_x;
+        output.append([lac[i][0], lac[i][1], v, x]);
+    return output;
+
 # MAIN -------------------------------------------------------------------------------------------
 
 f = open(sys.argv[1], 'r');
@@ -147,15 +186,24 @@ dump_stats(mean, sigma);
 grav_mag = omega(mean);
 print("magnitude {:.4f} at angle {:.3f} rad / {:.1f} deg".format(grav_mag, math.acos(mean[2] / grav_mag), math.acos(mean[2] / grav_mag) * 180 / math.pi), file=sys.stderr);
 
-solution = do_final_integrate(gyr_solution, acc_origs, mean);
-print(json.dumps(solution));
-print("rotation at final point ({}): {}".format(len(solution) - 1, rnd(rotmat_to_axis_angle(solution[-1][3]))), file=sys.stderr);
-print("final point: {}".format(solution[-1]), file=sys.stderr);
+lac = [acc_origs[i][1] - mean[1] for i in range(len(acc_origs))];
+lac_with_times = [[gyr_solution[i][0], lac[i]] for i in range(len(lac))];
+kalman = do_kalman_1d(lac, calib_n);
+base_integrate = do_1d_integrate(lac_with_times);
+kalman_integrate = do_1d_integrate([[gyr_solution[i][0], kalman[0][i]] for i in range(len(kalman[0]))]);
+print(json.dumps({'kalman': kalman, 'base_integrate': base_integrate, 'kalman_integrate': kalman_integrate}));
+print("final point of base integration:   {}".format(base_integrate[-1]), file=sys.stderr);
+print("final point of kalman integration: {}".format(kalman_integrate[-1]), file=sys.stderr);
 
-
-lac_mean, lac_sigma = stats([a[4] for a in solution], 0, len(solution));
-print('for lac over the entire file:', file=sys.stderr);
-dump_stats(lac_mean, lac_sigma);
+#solution = do_final_integrate(gyr_solution, acc_origs, mean);
+#print(json.dumps(solution));
+#print("rotation at final point ({}): {}".format(len(solution) - 1, rnd(rotmat_to_axis_angle(solution[-1][3]))), file=sys.stderr);
+#print("final point: {}".format(solution[-1]), file=sys.stderr);
+#
+#
+#lac_mean, lac_sigma = stats([a[4] for a in solution], 0, len(solution));
+#print('for lac over the entire file:', file=sys.stderr);
+#dump_stats(lac_mean, lac_sigma);
 
 
 ## calibrating without gyro transform
