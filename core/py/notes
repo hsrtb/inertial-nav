@@ -754,3 +754,21 @@ now fixed:
     final point of base integration:   [26.389208313077688, 0.06645903630903374, -0.019599798234209174, 2.869311173356096]
     final point of kalman integration: [26.389208313077688, 0.06594797450788456, -0.019578946863222004, 2.8698948186635995]
 and now K = 0.982... and the model is back to just spitting back whatever the sensor says.
+
+it has previously occurred to me that this filtering system can't fix the drift during the calibration phase because I'm
+feeding it a prior (i.e. Q) that the device is getting pushed around, so it expects pushes and believes the sensor, when
+in fact there are no pushes. I think this could be 'fixed' (in a somewhat degenerate sense) by just asserting Q = 0
+which i think leads to K[k] = 0 for all k. going to try it just to confirm. sigma2_j = 0, only running for calibration
+period:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman4-y.json
+    [...]
+    sigma2_j / sigma2_z  = 0.000000
+    final point of base integration:   [19.952637451700866, -0.00016455253573406659, 2.9341486808788304e-05, 0.2639046326989401]
+    final point of kalman integration: [19.952637451700866, 0.0, 0.0, 0.0]
+what if i loosen it up a bit; say we expect jerks of up to 2 m / s^3? sigma2_j = 1:
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260708_205242.csv 20 > slide-kalman4-y.json
+    [...]
+    sigma2_j / sigma2_z  = 8169.341531
+    final point of base integration:   [19.952637451700866, -0.00016455253573406659, 2.9341486808788304e-05, 0.2639046326989401]
+    final point of kalman integration: [19.952637451700866, -0.0024247087477576594, -1.6760095183823844e-05, 0.26244407626649063]
+right back to full drift.

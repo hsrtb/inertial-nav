@@ -110,17 +110,17 @@ def dump_stats(mean, sigma):
 # KALMAN -----------------------------------------------------------------------------------------
 
 # lac := [time, lac]
-def do_kalman_1d(lac, sigma2_j, sigma2_z):
+def do_kalman_1d(lac, sigma2_j, sigma2_z, n):
     print("sigma2_j / sigma2_z  = {:.6f}".format(sigma2_j / sigma2_z), file=sys.stderr);
     F = 1;
     H = 1;
     R = sigma2_z;
-    xhat = [None for i in range(len(lac))];
-    P = [None for i in range(len(lac))];
+    xhat = [None for i in range(n)];
+    P = [None for i in range(n)];
     xhat[0] = 0;
     P[0] = 0;
-    K = [None for i in range(len(lac))];
-    for k in range(1, len(lac)):
+    K = [None for i in range(n)];
+    for k in range(1, n):
         delta_t = lac[k][0] - lac[k - 1][0];
         G_k = delta_t;
         Q_k = delta_t ** 2 * sigma2_j;
@@ -201,8 +201,8 @@ dump_stats(jerk_mean_calib, jerk_sigma_calib);
 
 axis = 1;
 lac_1d = [[lac[i][0], lac[i][1][axis]] for i in range(len(lac))];
-kalman = do_kalman_1d(lac_1d, jerk_sigma_full[axis]**2, sigma[axis] ** 2);
-base_integrate = do_1d_integrate(lac_1d);
+kalman = do_kalman_1d(lac_1d, 1, sigma[axis] ** 2, calib_n);
+base_integrate = do_1d_integrate(lac_1d[:calib_n]);
 kalman_integrate = do_1d_integrate([[gyr_solution[i][0], kalman[0][i]] for i in range(len(kalman[0]))]);
 print(json.dumps({'kalman': kalman, 'base_integrate': base_integrate, 'kalman_integrate': kalman_integrate}));
 print("final point of base integration:   {}".format(base_integrate[-1]), file=sys.stderr);
