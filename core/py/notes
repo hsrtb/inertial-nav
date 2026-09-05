@@ -1038,3 +1038,47 @@ for 08-28 ride, which from google earth should have final displacement [2850, 17
     > 2 * got_v / 798^2
     [1]  0.0004020075  0.0007663268 -0.0001083536
 matches pretty closely as in the 1D version.
+
+---
+
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260902_094431.csv 15
+    [...]
+    final point: [836.6398599636741, 0.21408353124121415, [0.029474247, -0.19624045, -0.08032878], [[0.9948445078409309, -0.08038563174223495, -0.061826818034967146], [0.08463451787015554, 0.9939864223175822, 0.06948374366173571], [0.05586952303181592, -0.0743582037019009, 0.995665332297141]], [0.06284671169575623, 0.7084212448535518, 0.009316942708814224], [-234.17487426711955, 187.9480234567877, -9.246275093481966], [-71495.15521134723, 48628.64126645776, 179.27972991405028]]
+google earth ground truth is [2500, -2460, -12]
+
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260902_105445.csv 10
+    [...]
+    final point: [197.3803674308583, 0.047013561516561046, [0.035888333, 0.01695151, -0.025198191], [[0.9990119972751541, 0.025156118257863937, 0.036636034372091016], [-0.02684407148460453, 0.9985652096811557, 0.04633484477773843], [-0.03541786450995696, -0.047272526150441974, 0.9982539171698182]], [0.08320217799911148, -0.220607106961777, 0.020033714529635205], [-5.123582106114969, 5.908274409884375, 2.177384838059491], [-108.14978253028438, 1255.5266034134966, 138.49036098481585]]
+google earth ground truth is [340, 320, -4]
+
+testing:
+    > got = c(-71495, 48630, 179)
+    > correct = c(2500, -2460, -12)
+    > got_v = c(-234, 188, -9)
+    > t = 836.6
+    > 6 * (got - correct) / t^3
+    [1] -7.582284e-04  5.235204e-04  1.957181e-06
+    > 2 * got_v / t^2
+    [1] -6.686674e-04  5.372199e-04 -2.571798e-05
+    > got = c(-108, 1255, 138)
+    > correct = c(340, 320, -4)
+    > got_v = c(-5.1, 5.9, 2.17)
+    > t = 197.4
+    > 6 * (got - correct) / t^3
+    [1] -0.0003494522  0.0007293255  0.0001107639
+    > 2 * got_v / t^2
+    [1] -0.0002617616  0.0003028222  0.0001113770
+about 3-4 of 6 are reasonably close.
+
+the 2 rides that match best both had the phone in a uniform position (backpack pocket) and mostly consisted of traveling
+not the in the original orientation of the phone. the 07-20 ride is about 1/3rd me walking around not on the bike, so
+potentially the time-linearity of error growth doesn't hold because total rotation is potentially not linear in time.
+the last ride was half along the direction of the original orientation; if the error is caused by a scale factor on the
+gyro outputs, then i think it should ~vanish when oriented in the original direction*, so the error would again not be
+linear in time. however the phone is of course ~never in its original orientation due to being in the backpack pocket.
+
+*: however this does not explain the 12 degrees error on the spin test.
+
+the implied per-distance-traveled error seems to be in the ballpark of the exact-referenced test:
+    > (5e-4 / 9.8) / (470 / 800)
+    [1] 8.684325e-05
