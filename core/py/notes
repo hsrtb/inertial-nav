@@ -878,3 +878,163 @@ this gives a third acceleration value but the same velocity and position. K = 0.
     final point of base integration:     [362.8445204460295, -0.18079430009614456, -16.035233624407248, -3646.0468053762515]
     final point of kalman integration:   [362.8445204460295, 0.08514817418139879, -16.438739269186723, -3571.879850257699]
 starting to very slightly pull apart. K = 0.000475.
+
+------------------------------------------------------------------------------------------------------------------------------
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_184541.csv 1
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.061216, 0.006446, 9.784046]
+    sigma: [0.147774, 0.080967, 0.178401]
+    t: [0.414256, 0.079615, 54.842948]
+    magnitude 9.7842 at angle 0.006 rad / 0.4 deg
+    rotation at final point (4695): (0.019, [0.404797, -0.017203, -0.914245])
+    total rotational distance traveled: 7.485
+    final time 10.409
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_190440.csv 1
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.411237, 0.197736, 9.781959]
+    sigma: [0.609312, 0.278889, 0.455158]
+    t: [0.67492, 0.709014, 21.491364]
+    magnitude 9.7926 at angle 0.047 rad / 2.7 deg
+    rotation at final point (15179): (0.22, [-0.053933, 0.005349, -0.99853])
+    total rotational distance traveled: 185.303
+    final time 33.655
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_182912.csv 1
+    difference in number of points is 0
+    [... divide by zero's ...]
+    acc_origs:
+    mean: [0.023815, -0.114567, 9.777176]
+    sigma: [0.009193, 0.009835, 0.012695]
+    t: [2.590658, -11.64943, 770.183193]
+    magnitude 9.7779 at angle 0.012 rad / 0.7 deg
+    rotation at final point (97579): (0.001, [-0.437527, -0.799233, -0.412063])
+    total rotational distance traveled: 0.867
+    final time 216.336
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260828_125309.csv 1
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.3176, 0.70203, 9.749223]
+    sigma: [0.039886, 0.044272, 0.153865]
+    t: [7.962789, 15.857041, 63.362088]
+    magnitude 9.7796 at angle 0.079 rad / 4.5 deg
+    rotation at final point (359952): (0.155, [-0.344615, 0.443586, 0.827328])
+    total rotational distance traveled: 473.449
+    final time 798.147
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260720_202558.csv 1
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.041431, 0.198504, 9.770387]
+    sigma: [0.12437, 0.044854, 0.205664]
+    t: [0.333129, 4.425514, 47.506581]
+    magnitude 9.7725 at angle 0.021 rad / 1.2 deg
+    rotation at final point (163656): (0.028, [0.388055, 0.326466, -0.861878])
+    total rotational distance traveled: 284.63
+    final time 362.845
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260901_145602.csv 10
+    difference in number of points is 0
+    [... 108 divide by zero's ...]
+    acc_origs:
+    mean: [0.027649, 0.252735, 9.760577]
+    sigma: [0.013184, 0.016221, 0.018706]
+    t: [2.097197, 15.580839, 521.787469]
+    magnitude 9.7639 at angle 0.026 rad / 1.5 deg
+    rotation at final point (467146): (0.002, [0.984828, 0.173012, -0.013348])
+    total rotational distance traveled: 2.078
+    final time 1035.659
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260902_094431.csv 15
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.012179, 0.788235, 9.739373]
+    sigma: [0.038213, 0.033705, 0.064249]
+    t: [0.318713, 23.386335, 151.587356]
+    magnitude 9.7712 at angle 0.081 rad / 4.6 deg
+    rotation at final point (377301): (0.125, [-0.578736, -0.473542, 0.663945])
+    total rotational distance traveled: 462.832
+    final time 836.64
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260902_105445.csv 10
+    difference in number of points is 0
+    acc_origs:
+    mean: [0.137457, 0.997805, 9.719182]
+    sigma: [0.045874, 0.02955, 0.101553]
+    t: [2.996426, 33.76631, 95.705638]
+    magnitude 9.7712 at angle 0.103 rad / 5.9 deg
+    rotation at final point (89013): (0.065, [-0.725265, 0.55827, -0.402895])
+    total rotational distance traveled: 117.972
+    final time 197.38
+    [nibawr@amaranth py]$ ./scratch ../../pulled/rec_20260905_160054.csv 20
+    difference in number of points is 0
+    acc_origs:
+    mean: [-0.060734, 0.076961, 9.772919]
+    sigma: [0.010349, 0.013469, 0.012811]
+    t: [-5.868404, 5.714089, 762.829198]
+    magnitude 9.7734 at angle 0.010 rad / 0.6 deg
+    rotation at final point (131487): (0.034, [0.310674, 0.697435, 0.645807])
+    total rotational distance traveled: 569.28
+    final time 291.548
+
+| recording | rotational distance traveled | gyro integration final error | time | error / distance | error / time |
+| rec_20260828_182912 (still) | 0.867 rad | 0.001 rad | 216.336 sec | 0.1% | 5 urad / s |
+| rec_20260828_184541 | 7.485 rad | 0.019 rad | 10.409 sec | 0.25% | 1825 urad / s |
+| rec_20260828_190440 | 185.303 rad | 0.22 rad | 33.655 sec | 0.119% | 6537 urad / s |
+| rec_20260901_145602 (still) | 2.078 rad | 0.002 rad | 1035.659 sec | 0.1% | 2 urad / s |
+
+note the numbers for _190440 match exactly with the results of Opus 5's implementation.
+
+bike rides:
+| rec_20260720_202558 | 284.63 rad  | 0.028 rad | 362.845 sec | 0.0098% | 77 urad / s  |
+| rec_20260828_125309 | 473.449 rad | 0.155 rad | 798.147 sec | 0.0327% | 194 urad / s |
+| rec_20260902_094431 | 462.832 rad | 0.125 rad | 836.64 sec  | 0.027%  | 149 urad / s |
+| rec_20260902_105445 | 117.972 rad | 0.065 rad | 197.38 sec  | 0.055%  | 329 urad / s |
+
+exact-referenced start and end:
+| rec_20260905_160054 | 569.28 rad  | 0.034 rad | 291.548 sec | 0.0059% | 116 urad / s |
+
+attempt at applying this exactly-measured error to 08-28 bike ride:
+    > gyro_b = 0.000059 * 473.449 / 798.147
+    > a_b = gyro_b * 9.8
+    > v_err = 0.5 * a_b * 798^2
+    > x_err = (1/6) * a_b * 798^3
+    > a_b
+    [1] 0.0003429797
+    > v_err
+    [1] 109.2054
+    > x_err
+    [1] 29048.64
+    > (276 / v_err) * x_err
+    [1] 73416
+and at testing conformity with linearly increasing acceleration bias:
+    > 6 * 73000 / (798^3)
+    [1] 0.000861917
+    > 2 * 276 / (798^2)
+    [1] 0.0008668287
+    > 6 * 2900 / (362.8^3)
+    [1] 0.000364374
+    > 2 * 16.4 / (362.8^2)
+    [1] 0.000249195
+looks like 08-28 ride matches but with a different gryoscope error rate than the exact-referenced walk, while the 07-20
+ride does not match - however this is a 1D reduction of a 3D process.
+
+trying dimensions individually for 07-20 ride:
+    > 2 * -3.14 / 362.84^2
+    [1] -4.77012e-05
+    > 6 * 250 / 362.84^3
+    [1] 3.140117e-05
+    > 2 * -16 / 362.84^2
+    [1] -0.0002430635
+    > 6 * -4020 / 362.84^3
+    [1] -0.0005049308
+    > 2 * 1.845 / 362.84^2
+    [1] 2.802825e-05
+    > 6 * 250 / 362.84^3
+    [1] 3.140117e-05
+first dimension the directions don't match, second has factor of 2 discrepancy, third has factor 1.12 discrepancy.
+for 08-28 ride, which from google earth should have final displacement [2850, 1750, 3]:
+    > correct = c(2850, 1750, 3)
+    > got = c(36762, 68902, -10120)
+    > got_v = c(128, 244, -34.5)
+    > 6 * (got - correct) / 798^3
+    [1]  0.0004004018  0.0007928692 -0.0001195231
+    > 2 * got_v / 798^2
+    [1]  0.0004020075  0.0007663268 -0.0001083536
+matches pretty closely as in the 1D version.
